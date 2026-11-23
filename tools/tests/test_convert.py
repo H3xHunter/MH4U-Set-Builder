@@ -29,6 +29,13 @@ create table gathering(_id integer primary key, item_id int, location_id int, ar
 create table monsters(_id integer primary key, class text, name text);
 create table monster_damage(_id integer primary key, monster_id int, body_part text, cut, impact, shot, fire, water, ice, thunder, dragon, ko);
 create table locations(_id integer primary key, name text);
+create table quests(_id integer primary key, name text, hub text, type text, stars int);
+create table quest_rewards(_id integer primary key, quest_id int, item_id int, reward_slot text, percentage int, stack_size int);
+create table arena_quests(_id integer primary key, name text);
+create table arena_rewards(_id integer primary key, arena_id int, item_id int, percentage int, stack_size int);
+create table combining(_id integer primary key, created_item_id int, item_1_id int, item_2_id int, amount_made_min int, amount_made_max int, percentage int);
+create table veggie_elder(_id integer primary key, location_id int, offer_item_id int, receive_item_id int, quantity int);
+create table wyporium(_id integer primary key, item_in_id int, item_out_id int, unlock_quest_id int);
 """
 SHARP = "5.10.13.18.14.2.0 5.10.13.18.14.6.3"
 
@@ -44,6 +51,9 @@ def make_db(path, mutate=None):
         (10, "Ore", "Ore", "", 2), (11, "Scale", "Scale", "", 3),
         (20, "Rathalos Mail", "Armor", "Body", 5), (21, "Plain Cap", "Armor", "Head", 1),
         (22, "Odd Earring", "Armor", "Head", 1), (23, "Alloy Greaves", "Armor", "Legs", 4),
+        (12, "Dust", "Ore", "", 1), (13, "Gem", "Ore", "", 1),
+        (50, "Ingredient A", "Bug", "", 1), (51, "Ingredient B", "Bug", "", 1),
+        (52, "Veggie Offer", "Plant", "", 1), (53, "Counterpart", "Flesh", "", 2),
         (30, "Attack Jewel 2", "Decoration", "", 3),
         (40, "Great Blade", "Weapon", "Great Sword", 5), (41, "Blank Blade", "Weapon", "Great Sword", 5),
         (42, "Split Blade", "Weapon", "Great Sword", 5), (43, "Bad Sharp", "Weapon", "Great Sword", 5),
@@ -57,7 +67,17 @@ def make_db(path, mutate=None):
     c.executemany("insert into item_to_skill_tree(item_id,skill_tree_id,point_value) values(?,?,?)", [
         (20, 2, 2), (20, 3, -2), (23, 1, 1), (23, 2, 0), (30, 2, 1), (30, 3, -1)])
     c.executemany("insert into components(created_item_id,component_item_id,quantity,type) values(?,?,?,?)", [
-        (20, 10, 3, "Create"), (20, 11, 2, "Create A"), (23, 11, 1, "Improve")])
+        (20, 10, 3, "Create"), (20, 11, 2, "Create A"), (23, 11, 1, "Improve"),
+        (21, 12, 1, "Create"), (21, 13, 1, "Create")])
+    c.execute("insert into quests values(1,'Quest One','Guild','Normal',7)")
+    c.execute("insert into quests values(2,'Unused Quest','Caravan','Key',1)")
+    c.execute("insert into quest_rewards(quest_id,item_id,reward_slot,percentage,stack_size) values(1,11,'A',50,1)")
+    c.execute("insert into arena_quests values(1,'Arena One')")
+    c.execute("insert into arena_rewards(arena_id,item_id,percentage,stack_size) values(1,11,35,2)")
+    c.execute("insert into combining(created_item_id,item_1_id,item_2_id,amount_made_min,amount_made_max,percentage) values(11,50,51,1,2,95)")
+    c.execute("insert into veggie_elder(location_id,offer_item_id,receive_item_id,quantity) values(5,52,11,3)")
+    c.executemany("insert into wyporium(item_in_id,item_out_id,unlock_quest_id) values(?,?,?)",
+                  [(11, 10, 1), (53, 11, 1), (12, 12, 1)])
     c.executemany("insert into weapons values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", [
         (40, None, "Great Sword", 1248, "", "Fire", 300, "", "", "Ice", 410, 40, SHARP, "10", "", "", "", "", "", "", "", "", "", "", "", 3, 9, 1),
         (41, 0, "Great Sword", 100, "", "", "", "", "", "", "", 0, SHARP, "", "", "", "", "", "", "", "", "", "", "", "", 2, 1, 0),
@@ -200,15 +220,56 @@ class ConvertTests(Base):
         self.assertEqual(a["materials"], [{"itemId": 10, "quantity": 3, "kind": "create"},
                                           {"itemId": 11, "quantity": 2, "kind": "createA"}])
         m = {x["id"]: x for x in d["materials"]}
-        self.assertEqual(sorted(m), [10, 11])
+        self.assertEqual(sorted(m), [10, 11, 12, 13])
         self.assertEqual([x["rank"] for x in m[10]["drops"]], ["HR", "G"])
         self.assertIsNone(m[10]["drops"][1]["percentage"])  # '' -> null
         self.assertEqual(m[10]["gathering"][0]["locationId"], 5)
-        self.assertEqual(self.no_src, [11])
+        self.assertEqual(self.no_src, [13])
         self.assertEqual([l["id"] for l in d["locations"]], [5])
         self.assertEqual(len(d["monsters"]), 2)
         self.assertEqual(d["monsters"][0]["hitzones"][0]["part"], "Head")
         self.assertEqual(d["horn"][0]["effect2"], None)
+
+    def test_sources(self):
+        d = self.run_convert()
+        m = {x["id"]: x for x in d["materials"]}
+        s = m[11]["sources"]
+        self.assertEqual(s["quests"], [{"questId": 1, "slot": "A", "percentage": 50, "stackSize": 1}])
+        self.assertEqual(s["arena"], [{"arenaQuestId": 1, "percentage": 35, "stackSize": 2}])
+        self.assertEqual(s["combining"], [{"item1Id": 50, "item2Id": 51, "amountMin": 1, "amountMax": 2, "percentage": 95}])
+        self.assertEqual(s["veggieElder"], [{"offerItemId": 52, "quantity": 3}])
+        # wyporium: both materials of a row see it; column meaning is kept, no direction label
+        row1 = {"itemInId": 11, "itemOutId": 10, "unlockQuestId": 1}
+        row2 = {"itemInId": 53, "itemOutId": 11, "unlockQuestId": 1}
+        self.assertEqual(s["wyporium"], [row1, row2])
+        self.assertEqual(m[10]["sources"]["wyporium"], [row1])
+        # same item on both sides of one row is listed once
+        self.assertEqual(m[12]["sources"]["wyporium"], [{"itemInId": 12, "itemOutId": 12, "unlockQuestId": 1}])
+        # existing fields untouched, other source types empty
+        self.assertEqual(len(m[10]["drops"]), 2)
+        self.assertEqual(m[10]["sources"]["quests"], [])
+        self.assertEqual(m[13]["sources"], {k: [] for k in ("quests", "arena", "combining", "veggieElder", "wyporium")})
+
+    def test_quests_and_items_files(self):
+        d = self.run_convert()
+        self.assertEqual(d["quests"], [
+            {"id": 1, "kind": "quest", "name": "Quest One", "hub": "Guild", "type": "Normal", "stars": 7},
+            {"id": 1, "kind": "arena", "name": "Arena One", "hub": None, "type": None, "stars": None}])
+        self.assertEqual([i["id"] for i in d["items"]], [50, 51, 52, 53])  # materials excluded
+        self.assertEqual(d["items"][0], {"id": 50, "name": "Ingredient A", "type": "Bug", "rarity": 1})
+        self.assertEqual(d["meta"]["counts"]["quests"], 2)
+        self.assertEqual(d["meta"]["counts"]["items"], 4)
+
+    def test_dangling_source_references_fail(self):
+        for sql in ("delete from quests where _id=1",
+                    "delete from arena_quests where _id=1",
+                    "delete from items where _id=50",
+                    "delete from items where _id=52",
+                    "delete from items where _id=53"):
+            with self.subTest(sql=sql):
+                self.tmp = Path(tempfile.mkdtemp(dir=self.tmp))
+                with self.assertRaises(convert.ConvertError):
+                    self.run_convert(lambda c, s=sql: c.execute(s))
 
     def test_missing_reference_fails_integrity(self):
         files = json.loads(json.dumps(self.run_convert()))
@@ -221,6 +282,13 @@ class ConvertTests(Base):
             lambda f: f["materials"][0]["drops"].append({"monsterId": 99}),
             lambda f: f["materials"][0]["gathering"].append({"locationId": 99}),
             lambda f: f["armor"].append(dict(f["armor"][0])),
+            lambda f: f["materials"][1]["sources"]["quests"].append({"questId": 99}),
+            lambda f: f["materials"][1]["sources"]["arena"].append({"arenaQuestId": 99}),
+            lambda f: f["materials"][1]["sources"]["combining"].append({"item1Id": 99, "item2Id": 50}),
+            lambda f: f["materials"][1]["sources"]["veggieElder"].append({"offerItemId": 99}),
+            lambda f: f["materials"][1]["sources"]["wyporium"].append({"itemInId": 99, "itemOutId": 50, "unlockQuestId": 1}),
+            lambda f: f["materials"][1]["sources"]["wyporium"].append({"itemInId": 50, "itemOutId": 50, "unlockQuestId": 99}),
+            lambda f: f["quests"].append(dict(f["quests"][0])),
             lambda f: f["skills"][0]["tiers"].append(dict(f["skills"][0]["tiers"][0])),
         ):
             bad = json.loads(json.dumps(files))
@@ -236,7 +304,7 @@ class ConvertTests(Base):
         self.run_convert(out="a")
         self.run_convert(out="b")
         names = sorted(p.name for p in (self.tmp / "a").iterdir())
-        self.assertEqual(len(names), 9)
+        self.assertEqual(len(names), 11)
         for n in names:
             raw = (self.tmp / "a" / n).read_bytes()
             self.assertEqual(raw, (self.tmp / "b" / n).read_bytes())
