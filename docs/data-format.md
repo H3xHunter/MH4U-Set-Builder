@@ -29,24 +29,24 @@ from `skills.required_skill_tree_points`). `description` is English text or null
 - `slot`: `head | chest | arms | waist | legs` (source "Body" is `chest`).
 - `hunterType`: `blade | gunner | both | null`. `gender`: `male | female | both | null`.
   Null means the source was blank (one piece: Hawkeye Earring, id 3753; a warning is logged).
-- `slots`: decoration capacity 0-3. `defense`, `maxDefense`: as stored (`maxDefense` meaning unverified).
+- `slots`: decoration capacity 0-3. `defense`: integer, as stored. `maxDefense`: number | null (null on 41 armor pieces; meaning unknown, do not infer).
 - `res`: `{fire, water, thunder, ice, dragon}` integers.
 - `skills`: `{treeId: points}`, non-zero only, negatives kept, Torso Up never listed.
 - `torsoUp`: true if the source piece had the Torso Up tree.
 - `rarity`: as stored in items.
 - `materials`: `[{itemId, quantity, kind}]`, `kind` is `create | createA | createB | improve` (from `components.type`; the
-  meaning of A/B is unverified). Order follows the source row order. Item ids refer to `materials.json`.
+  meaning of A/B is unverified). Only `create` appears in the current data; the other values are allowed. Order follows the source row order. Item ids refer to `materials.json`.
 - There is **no rank (LR/HR/G) on armor**; the source does not store it.
 
 ## decorations.json
 `[{id, name, size, skills}]`. `size` = slots used. `skills` as in armor (negatives kept).
 
 ## weapons.json
-`[{id, name, class, parentId, treeDepth, final, rarity, attack, maxAttack, affinity, affinityOptions, element, element2,
+`[{id, name, class, parentId, final, rarity, attack, maxAttack, affinity, affinityOptions, element, element2,
 awaken, defenseBonus, sharpness, slots, hornNotes, extra}]`
 - `class`: source sub_type (e.g. "Great Sword", "Sword and Shield", "Light Bowgun").
 - `parentId`: previous weapon in the upgrade tree, or null (the source uses 0 for "none"; ids start at 1).
-- `final`: boolean. `attack`, `maxAttack` (null when blank): as stored; whether they equal in-game displayed attack is unverified.
+- `final`: boolean. `attack`: integer. `maxAttack`: number | null (null for all weapons in the current data). Both as stored; whether they equal in-game displayed attack is unverified.
 - `affinity`: integer, or null when `affinityOptions` is set. Plain integer text -> that integer. Blank in the source is
   treated as 0 (owner-confirmed rule). Any other text makes the conversion fail.
 - `affinityOptions`: null, or `[a, b]` (in source order) when the source text is two integers such as "-45/20". The
