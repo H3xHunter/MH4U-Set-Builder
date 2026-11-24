@@ -27,6 +27,8 @@ export function EquipmentPanel({
   const weaponTarget = { kind: 'weapon' } as const
   const weaponSel = b.build.weapon
   const weaponData = resolveWeapon(b.build, b.ctx)
+  // The Start a set card is only for an empty build: it goes away once any weapon or armor is chosen.
+  const empty = weaponSel.kind === 'none' && ARMOR_SLOTS.every((slot) => b.build.armor[slot] === null)
   return (
     <Section
       title="Equipment"
@@ -37,16 +39,18 @@ export function EquipmentPanel({
       }
     >
       <MobileSummary b={b} />
-      <Card className="mb-3 gap-3 py-4">
-        <div className="space-y-3 px-4">
-          <h3 className={displayHeading}>Start a set</h3>
-          <p className="text-sm text-muted-foreground">
-            Pick a weapon to set your class (Blademaster or Gunner) and its slots, or jump straight to armor. Skills
-            fill in as you go.
-          </p>
-          <Button onClick={onPickWeapon}>Choose a weapon</Button>
-        </div>
-      </Card>
+      {empty && (
+        <Card className="mb-3 gap-3 py-4">
+          <div className="space-y-3 px-4">
+            <h3 className={displayHeading}>Start a set</h3>
+            <p className="text-sm text-muted-foreground">
+              Pick a weapon to set your class (Blademaster or Gunner) and its slots, or jump straight to armor. Skills
+              fill in as you go.
+            </p>
+            <Button onClick={onPickWeapon}>Choose a weapon</Button>
+          </div>
+        </Card>
+      )}
       <ul className="space-y-2">
         {weaponSel.kind === 'none' ? (
           <EquipmentCard

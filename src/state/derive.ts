@@ -1,5 +1,6 @@
 import { ARMOR_SLOTS, type Armor, type ArmorSlot, type Weapon } from '@/data/types'
 import { computeSkills, type SkillInput, type SkillRow } from '@/lib/skills'
+import { skillEffects, type EffectIssue, type Resistances } from '@/lib/skillEffects'
 import { slotUsage, type SlotUsage } from '@/lib/slots'
 import {
   capacityOf,
@@ -13,13 +14,7 @@ import {
   type Target,
 } from './build'
 
-export interface Resistances {
-  fire: number
-  water: number
-  thunder: number
-  ice: number
-  dragon: number
-}
+export type { Resistances }
 
 export interface DerivedBuild {
   weapon: Weapon | null
@@ -28,13 +23,22 @@ export interface DerivedBuild {
   skills: SkillRow[]
   /** Sum over worn pieces of `defense`, or of `maxDefense` when armorLevel is 'max' (see fallback below). */
   armorDefense: number
-  /** The weapon's `defenseBonus`. UNVERIFIED whether it belongs in the in-game defense total. */
+  /** The weapon's `defenseBonus`; confirmed by Hex to be added like armor defense. */
   weaponDefenseBonus: number
-  /** armorDefense + weaponDefenseBonus. Counting the weapon bonus is UNVERIFIED. */
+  /** Flat defense from the Defense skill's active tier (both armor levels); 0 when none. */
+  skillDefense: number
+  /** armorDefense + weaponDefenseBonus + skillDefense. */
   totalDefense: number
   /** In 'max' mode, how many worn pieces had maxDefense null and used `defense` instead (always 0 in 'normal'). */
   maxDefenseFallbackCount: number
+  /** Armor pieces only. */
   resistances: Resistances
+  /** Element Res skills: the active tier's resistance (see skillEffects.ts, values need an in-game check). */
+  skillResistances: Resistances
+  /** resistances + skillResistances. */
+  totalResistances: Resistances
+  /** Active skill tiers that are missing from the skillEffects tables (contributed 0). */
+  effectIssues: EffectIssue[]
 }
 
 export function deriveBuild(state: BuildState, ctx: BuildContext): DerivedBuild {
@@ -72,6 +76,11 @@ export function deriveBuild(state: BuildState, ctx: BuildContext): DerivedBuild 
   const resistances: Resistances = { fire: 0, water: 0, thunder: 0, ice: 0, dragon: 0 }
   for (const a of worn) for (const k of Object.keys(resistances) as (keyof Resistances)[]) resistances[k] += a.res[k]
 
+  const skills = computeSkills(skillInput, ctx.data.skills)
+  const effects = skillEffects(skills)
+  const totalResistances = { ...resistances }
+  for (const k of Object.keys(totalResistances) as (keyof Resistances)[]) totalResistances[k] += effects.resistances[k]
+
   return {
     weapon,
     slotUsage: {
@@ -80,11 +89,15 @@ export function deriveBuild(state: BuildState, ctx: BuildContext): DerivedBuild 
       armor: Object.fromEntries(ARMOR_SLOTS.map((slot) => [slot, usage({ kind: 'armor', slot })])) as Record<ArmorSlot, SlotUsage>,
     },
     skillInput,
-    skills: computeSkills(skillInput, ctx.data.skills),
+    skills,
     armorDefense,
     weaponDefenseBonus,
-    totalDefense: armorDefense + weaponDefenseBonus,
+    skillDefense: effects.defense,
+    totalDefense: armorDefense + weaponDefenseBonus + effects.defense,
     maxDefenseFallbackCount,
     resistances,
+    skillResistances: effects.resistances,
+    totalResistances,
+    effectIssues: effects.issues,
   }
 }

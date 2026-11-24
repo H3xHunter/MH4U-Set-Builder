@@ -3,7 +3,7 @@ import { loadRealData } from '@/data/real-data-fixture'
 import { applyAction, emptyBuild, type Action, type BuildContext } from '@/state/build'
 import { deriveBuild } from '@/state/derive'
 import { mkArmor, mkData, mkWeapon } from '@/state/fixtures'
-import { damageReduction, damageTaken, defenseView, formatPercent, formatSigned } from './defenseView'
+import { breakdownParts, damageReduction, damageTaken, defenseView, formatPercent, formatSigned } from './defenseView'
 
 describe('damageReduction', () => {
   it.each([
@@ -53,7 +53,7 @@ describe('defenseView on the verified real-data build (defense 38 / 348, weapon 
 
   it('normal level', () => {
     const v = defenseView(deriveBuild(normal, ctx), 'normal')
-    expect(v).toMatchObject({ total: 58, armor: 38, weaponBonus: 20, hasAnything: true, fallbackCount: 0 })
+    expect(v).toMatchObject({ total: 58, armor: 38, weaponBonus: 20, skillDefense: 0, hasAnything: true, fallbackCount: 0 })
     expect(formatPercent(v.reduction!)).toBe('42.0%')
     expect(formatPercent(v.taken!)).toBe('58.0%')
     expect(v.resist.map((r) => [r.key, r.value])).toEqual([['fire', 0], ['water', -4], ['thunder', -3], ['ice', 2], ['dragon', -1]])
@@ -62,7 +62,7 @@ describe('defenseView on the verified real-data build (defense 38 / 348, weapon 
 
   it('max level changes the total and the reduction', () => {
     const v = defenseView(deriveBuild(max, ctx), 'max')
-    expect(v).toMatchObject({ total: 368, armor: 348, weaponBonus: 20 })
+    expect(v).toMatchObject({ total: 368, armor: 348, weaponBonus: 20, skillDefense: 0 })
     expect(formatPercent(v.reduction!)).toBe('82.1%')
     expect(formatPercent(v.taken!)).toBe('17.9%')
   })
@@ -103,5 +103,38 @@ describe('defenseView edge cases', () => {
     const v = defenseView(deriveBuild(max, ctx), 'max')
     expect(v.fallbackCount).toBe(1)
     expect(v.armor).toBe(70)
+  })
+})
+
+describe('breakdownParts', () => {
+  it('omits zero parts and signs the weapon and skill parts', () => {
+    expect(breakdownParts({ armor: 38, weaponBonus: 20, skillDefense: 10 })).toEqual(['Armor 38', 'Weapon +20', 'Skills +10'])
+    expect(breakdownParts({ armor: 38, weaponBonus: 0, skillDefense: -10 })).toEqual(['Armor 38', 'Skills \u221210'])
+    expect(breakdownParts({ armor: 0, weaponBonus: 20, skillDefense: 0 })).toEqual(['Weapon +20'])
+    expect(breakdownParts({ armor: 0, weaponBonus: 0, skillDefense: 0 })).toEqual(['Armor 0'])
+  })
+})
+
+describe('defenseView with skill effects', () => {
+  const trees = [
+    { id: 32, name: 'Defense', tiers: [{ points: 10, name: 'Defense Up (S)', description: null }] },
+    { id: 85, name: 'Fire Res', tiers: [{ points: 10, name: 'Fire Res +15', description: null }] },
+  ]
+  const data = mkData({ skills: trees, armor: [mkArmor(1, 'head', 0, { defense: 10, maxDefense: 50, skills: { '32': 10, '85': 10 }, res: { fire: 2, water: 0, thunder: 0, ice: 0, dragon: 0 } })] })
+  const ctx: BuildContext = { data, charms: [] }
+  const s = applyAction(emptyBuild(), { type: 'setArmor', slot: 'head', armorId: 1 }, ctx)
+
+  it('total, breakdown inputs, reduction and resistances include the skills', () => {
+    const v = defenseView(deriveBuild(s, ctx), 'normal')
+    expect(v).toMatchObject({ total: 20, armor: 10, skillDefense: 10 })
+    expect(formatPercent(v.reduction!)).toBe('20.0%')
+    expect(v.resist.find((r) => r.key === 'fire')!.value).toBe(17)
+  })
+
+  it('a Defense skill alone (no armor, no weapon) still counts as something', () => {
+    const charmCtx: BuildContext = { data, charms: [{ id: 'c', name: 'c', slots: 0, skills: { '32': 10 } }] }
+    const withCharm = applyAction(emptyBuild(), { type: 'setCharm', charmId: 'c' }, charmCtx)
+    const v = defenseView(deriveBuild(withCharm, charmCtx), 'normal')
+    expect(v).toMatchObject({ hasAnything: true, total: 10, armor: 0 })
   })
 })

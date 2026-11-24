@@ -1,4 +1,4 @@
-import { FORMULA_TEXT, defenseView, formatPercent, formatSigned } from '@/lib/defenseView'
+import { FORMULA_TEXT, breakdownParts, defenseView, formatPercent, formatSigned } from '@/lib/defenseView'
 import { cn } from '@/lib/utils'
 import type { useBuild } from '@/state/useBuild'
 import { Section } from './Section'
@@ -39,8 +39,7 @@ function DefenseSection({ b }: { b: Build }) {
       </div>
       {v.hasAnything && (
         <p className="mt-1 font-mono text-xs text-muted-foreground">
-          Armor {v.armor}
-          {v.weaponBonus !== 0 && ` · Weapon ${formatSigned(v.weaponBonus)}`}
+          {breakdownParts(v).join(' · ')}
         </p>
       )}
       {v.fallbackCount > 0 && (
@@ -50,7 +49,9 @@ function DefenseSection({ b }: { b: Build }) {
         </p>
       )}
 
-      <h3 className="mb-1.5 mt-4 text-[11px] uppercase tracking-wider text-muted-foreground">Armor resistances</h3>
+      <h3 className="mb-1.5 mt-4 text-[11px] uppercase tracking-wider text-muted-foreground" title="Armor plus element resistance skills">
+        Resistances
+      </h3>
       <div className="grid grid-cols-5 gap-1.5 text-center">
         {v.resist.map((r) => (
           <div
