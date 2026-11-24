@@ -33,6 +33,8 @@ This is an **unofficial, non-commercial fan project**. It is **not affiliated wi
 
 Monster Hunter, Monster Hunter 4 Ultimate, and all related names, characters and game data are trademarks or copyrighted works of **Capcom Co., Ltd.** This project is based on Capcom's intellectual property and will always be free, with no ads and no paid features. It contains no game audio or other game assets. The only game artwork is a small set of icons (armor slots, weapon classes, decoration, charm), which are Capcom's, used as-is in a non-commercial fan tool, and will be removed on request.
 
+Fonts (Barlow, Barlow Condensed, JetBrains Mono) are bundled under the SIL Open Font License 1.1; see THIRD_PARTY_NOTICES.md.
+
 If you represent Capcom and have any concern about this project, please open an issue and it will be addressed promptly.
 
 ## Data

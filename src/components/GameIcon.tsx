@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import type { ArmorSlot, DecorationColor } from '@/data/types'
 import { armorIcon, charmIcon, decorationIcon, ICON_SIZE, weaponIcon } from '@/lib/icons'
 
-export type IconScale = 1 | 2 | 3 | 4
+export type IconScale = 0.5 | 1 | 2 | 3 | 4
 
 export type GameIconProps = { scale?: IconScale } & (
   | { kind: 'armor'; slot: ArmorSlot; rarity: number }

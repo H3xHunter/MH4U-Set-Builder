@@ -2,7 +2,7 @@ import { GameIcon, type IconScale } from '@/components/GameIcon'
 import { ARMOR_SLOTS, DECORATION_COLORS } from '@/data/types'
 import { WEAPON_CLASSES } from '@/lib/icons'
 
-const SCALES: IconScale[] = [1, 2, 3]
+const SCALES: IconScale[] = [0.5, 1, 2, 3]
 const RARITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

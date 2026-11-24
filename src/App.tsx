@@ -1,29 +1,26 @@
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState } from 'react'
+import { ErrorState, LoadingState } from '@/components/layout/DataStates'
+import { Footer } from '@/components/layout/Footer'
+import { Header } from '@/components/layout/Header'
+import { Builder } from '@/components/layout/Builder'
+import type { PlayStyle } from '@/components/layout/Segmented'
+import { useGameData } from '@/state/useGameData'
 
 export default function App() {
+  const [gameData, retry] = useGameData()
+  const [style, setStyle] = useState<PlayStyle>('blade')
+
   return (
-    <div className="fade-in mx-auto flex min-h-screen max-w-2xl flex-col gap-8 px-4 py-12">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">MH4U Set Builder</h1>
-        <p className="text-muted-foreground">
-          A free, client-side set builder for Monster Hunter 4 Ultimate. Work in progress.
-        </p>
-      </header>
-      <main>
-        <Card>
-          <CardHeader>
-            <CardTitle>Coming soon</CardTitle>
-            <CardDescription>The builder itself is not implemented yet.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button>Start a set</Button>
-          </CardContent>
-        </Card>
+    <div className="flex min-h-dvh flex-col">
+      <Header style={style} onStyle={setStyle} />
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-4">
+        {gameData.status === 'loading' && <LoadingState />}
+        {gameData.status === 'error' && <ErrorState error={gameData.error} onRetry={retry} />}
+        {gameData.status === 'ready' && (
+          <Builder data={gameData.data} style={style} onStyle={setStyle} />
+        )}
       </main>
-      <footer className="mt-auto text-sm text-muted-foreground">
-        Unofficial fan project, not affiliated with or endorsed by Capcom.
-      </footer>
+      <Footer />
     </div>
   )
 }
