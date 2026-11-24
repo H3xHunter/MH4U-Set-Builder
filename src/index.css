@@ -20,6 +20,29 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   color-scheme: light dark;
+
+  /* Placeholder icon tints (eyeballed from the wiki); to be replaced by the design tokens. */
+  --rarity-1: #ffffff;
+  --rarity-2: #9b6fc4;
+  --rarity-3: #f2d200;
+  --rarity-4: #e58fa0;
+  --rarity-5: #4f9a3d;
+  --rarity-6: #6b9cf2;
+  --rarity-7: #e04b36;
+  --rarity-8: #1fa58f;
+  --rarity-9: #f58a1f;
+  --rarity-10: #e000d0;
+  --jewel-blue: #3b6fe0;
+  --jewel-cyan: #2ec4d6;
+  --jewel-green: #3fae49;
+  --jewel-grey: #9a9a9a;
+  --jewel-orange: #f08a24;
+  --jewel-pink: #f06fae;
+  --jewel-purple: #8a4fd0;
+  --jewel-red: #d93a3a;
+  --jewel-white: #ffffff;
+  --jewel-yellow: #f2d200;
+  --jewel-unknown: #6b6b6b;
 }
 
 @media (prefers-color-scheme: dark) {
