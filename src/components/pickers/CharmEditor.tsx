@@ -1,5 +1,5 @@
 import { Minus, Plus, X } from 'lucide-react'
-import { useMemo, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Segmented } from '@/components/layout/Segmented'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -100,6 +100,10 @@ export function CharmEditor({
   problem,
   error,
   isNew,
+  conflict,
+  discarding,
+  onKeep,
+  onDiscard,
   onSave,
   onCancel,
 }: {
@@ -112,9 +116,25 @@ export function CharmEditor({
   problem: string | null
   error: string | null
   isNew: boolean
+  /** The charm being edited was changed or deleted in another tab. */
+  conflict: 'changed' | 'deleted' | null
+  /** The inline "Discard changes?" confirm replaces the buttons. */
+  discarding: boolean
+  onKeep: () => void
+  onDiscard: () => void
   onSave: () => void
   onCancel: () => void
 }) {
+  const nameRef = useRef<HTMLInputElement>(null)
+  const keepRef = useRef<HTMLButtonElement>(null)
+  const wasDiscarding = useRef(false)
+  // The confirm takes focus when it shows; Keep editing puts it back in the form (the confirm buttons are gone).
+  useEffect(() => {
+    if (discarding) keepRef.current?.focus()
+    else if (wasDiscarding.current) nameRef.current?.focus()
+    wasDiscarding.current = discarding
+  }, [discarding])
+
   const [lastRow, setLastRow] = useState<number | null>(null)
   const trees = useMemo(() => new Map(data.skills.map((t) => [t.id, t])), [data])
 
@@ -145,6 +165,7 @@ export function CharmEditor({
         <label className="block space-y-1.5 text-sm">
           <span className="font-medium">Name (optional)</span>
           <Input
+            ref={nameRef}
             type="text"
             autoFocus
             data-autofocus
@@ -220,17 +241,35 @@ export function CharmEditor({
           )}
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
-        <p className={cn('min-w-0 flex-1 text-xs', error ? 'text-destructive' : 'text-muted-foreground')} role={error ? 'alert' : undefined}>
-          {error ?? problem ?? ''}
-        </p>
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="button" disabled={problem !== null} onClick={onSave}>
-          {isNew ? 'Save charm' : 'Save changes'}
-        </Button>
-      </div>
+      {discarding ? (
+        <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3" role="alertdialog" aria-label="Discard changes?">
+          <p className="min-w-0 flex-1 text-sm font-medium">Discard changes?</p>
+          <Button type="button" variant="destructive" onClick={onDiscard}>
+            Discard
+          </Button>
+          <Button ref={keepRef} type="button" variant="outline" onClick={onKeep}>
+            Keep editing
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
+          <p className={cn('min-w-0 flex-1 text-xs', error ? 'text-destructive' : 'text-muted-foreground')} role={error ? 'alert' : undefined}>
+            {error ??
+              (conflict === 'deleted'
+                ? 'This charm was deleted in another tab. You can keep your draft as a new charm.'
+                : conflict === 'changed'
+                  ? 'This charm changed in another tab. You can keep your draft as a new charm.'
+                  : problem) ??
+              ''}
+          </p>
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={problem !== null} onClick={onSave}>
+            {isNew ? 'Save charm' : conflict ? 'Save as new charm' : 'Save changes'}
+          </Button>
+        </div>
+      )}
     </>
   )
 }

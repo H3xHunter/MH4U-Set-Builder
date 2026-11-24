@@ -1,21 +1,44 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SkillChip, SlotRings, type TreeName } from '@/components/equipment/parts'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import type { GameData, SavedCharm } from '@/data/types'
-import { charmLabel, charmSkillEntries, draftInput, draftOf, draftProblem, emptyDraft, type CharmDraft } from '@/lib/charmView'
+import {
+  charmLabel,
+  charmSkillEntries,
+  draftInput,
+  draftOf,
+  draftProblem,
+  editConflict,
+  emptyDraft,
+  isDirty,
+  type CharmDraft,
+} from '@/lib/charmView'
 import type { CharmInput } from '@/lib/charms'
 import { MAX_CHARMS } from '@/lib/charms'
 import { cn } from '@/lib/utils'
 import { CharmEditor } from './CharmEditor'
 import { keyHint } from './pickerStyles'
 
-type View = { kind: 'list' } | { kind: 'edit'; id: string | null; draft: CharmDraft; chooser: number | null }
+type View =
+  | { kind: 'list' }
+  | {
+      kind: 'edit'
+      id: string | null
+      /** The charm as the editor opened it, to notice changes made in another tab. */
+      base: SavedCharm | null
+      start: CharmDraft
+      draft: CharmDraft
+      chooser: number | null
+      /** The inline "Discard changes?" confirm is showing. */
+      discarding: boolean
+    }
 type Result = { ok: true } | { ok: false; errors: string[] }
 
 function CharmRow({
   charm,
   equipped,
+  manage,
   treeName,
   confirming,
   onConfirm,
@@ -26,6 +49,8 @@ function CharmRow({
 }: {
   charm: SavedCharm
   equipped: boolean
+  /** Manage mode has no Equip. */
+  manage: boolean
   treeName: TreeName
   confirming: boolean
   onConfirm: (on: boolean) => void
@@ -51,7 +76,7 @@ function CharmRow({
         {confirming ? (
           <>
             <span className="text-sm">Delete this charm?</span>
-            <Button size="sm" variant="destructive" autoFocus onClick={onDelete}>
+            <Button size="sm" variant="destructive" data-confirm={charm.id} onClick={onDelete}>
               Confirm delete
             </Button>
             <Button size="sm" variant="outline" onClick={() => onConfirm(false)}>
@@ -60,16 +85,18 @@ function CharmRow({
           </>
         ) : (
           <>
-            <Button size="sm" disabled={equipped} aria-label={`Equip ${label}`} onClick={onEquip}>
-              Equip
-            </Button>
-            <Button size="sm" variant="outline" aria-label={`Edit ${label}`} onClick={onEdit}>
+            {!manage && (
+              <Button size="sm" disabled={equipped} {...(equipped ? {} : { 'data-primary': charm.id })} aria-label={`Equip ${label}`} onClick={onEquip}>
+                Equip
+              </Button>
+            )}
+            <Button size="sm" variant="outline" {...(manage || equipped ? { 'data-primary': charm.id } : {})} aria-label={`Edit ${label}`} onClick={onEdit}>
               Edit
             </Button>
             <Button size="sm" variant="outline" aria-label={`Duplicate ${label}`} onClick={onCopy}>
               Duplicate
             </Button>
-            <Button size="sm" variant="ghost" aria-label={`Delete ${label}`} onClick={() => onConfirm(true)}>
+            <Button size="sm" variant="ghost" data-delete={charm.id} aria-label={`Delete ${label}`} onClick={() => onConfirm(true)}>
               Delete
             </Button>
           </>
@@ -88,7 +115,8 @@ export function CharmPicker({
   equippedId,
   treeName,
   storageError,
-  issueCount,
+  loadNotice,
+  manage,
   onEquip,
   onSave,
   onDelete,
@@ -101,8 +129,10 @@ export function CharmPicker({
   equippedId: string | null
   treeName: TreeName
   storageError: string | null
-  /** Stored charms that could not be loaded (a backup was kept). */
-  issueCount: number
+  /** From the last load of the saved charms (see summarizeIssues). */
+  loadNotice: { unreadable: number; storageUnavailable: boolean }
+  /** Manage mode (from the header): no Equip, and nothing here changes the build. */
+  manage: boolean
   onEquip: (id: string | null) => void
   onSave: (input: CharmInput, id: string | null) => Result
   onDelete: (id: string) => void
@@ -112,44 +142,79 @@ export function CharmPicker({
   const [confirming, setConfirming] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
+  const pendingFocus = useRef<string | null>(null)
+
+  // Focus requested by a handler, applied after the render that changed the DOM (the old element is gone by then).
+  useEffect(() => {
+    if (pendingFocus.current === null) return
+    document.querySelector<HTMLElement>(`dialog[open] ${pendingFocus.current}`)?.focus()
+    pendingFocus.current = null
+  })
+
   const backToList = () => {
     setSaveError(null)
     setView({ kind: 'list' })
   }
   // Functional update: the editor sets the draft and the chooser in the same event, and both must stick.
-  const patchEdit = (p: Partial<{ draft: CharmDraft; chooser: number | null }>) =>
+  const patchEdit = (p: Partial<{ draft: CharmDraft; chooser: number | null; discarding: boolean }>) =>
     setView((v) => (v.kind === 'edit' ? { ...v, ...p } : v))
-  const newCharm = () => setView({ kind: 'edit', id: null, draft: emptyDraft(), chooser: null })
+  const openEditor = (id: string | null, base: SavedCharm | null) => {
+    const start = base ? draftOf(base) : emptyDraft()
+    setView({ kind: 'edit', id, base, start, draft: start, chooser: null, discarding: false })
+  }
+
+  const editing = view.kind === 'edit' ? view : null
+  const dirty = editing !== null && isDirty(editing.draft, editing.start)
+  const conflict = editing ? editConflict(editing.base, charms.find((c) => c.id === editing.id)) : null
+  // After a conflict the draft can only be saved as a new charm.
+  const saveAsNew = editing !== null && (editing.id === null || conflict !== null)
+  // Leaving the editor (Esc, Cancel, the X): a dirty draft asks first, an untouched one just goes.
+  const requestBack = () => (dirty ? patchEdit({ discarding: true }) : backToList())
+  const guardedClose = () => (open && dirty ? patchEdit({ discarding: true }) : onClose())
 
   const onEscape = () => {
-    if (view.kind === 'list') onClose()
-    else if (view.chooser !== null) setView({ ...view, chooser: null })
-    else backToList()
+    if (!editing) onClose()
+    else if (editing.chooser !== null) patchEdit({ chooser: null })
+    else if (editing.discarding) patchEdit({ discarding: false })
+    else requestBack()
+  }
+
+  const deleteRow = (id: string) => {
+    const at = charms.findIndex((c) => c.id === id)
+    const neighbour = charms[at + 1] ?? charms[at - 1]
+    pendingFocus.current = neighbour ? `[data-primary="${neighbour.id}"]` : '[data-new-charm]'
+    setConfirming(null)
+    onDelete(id)
   }
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={guardedClose}
       onEscape={onEscape}
+      closeOnBackdrop={!dirty}
       fallbackFocus='[data-trigger="charm"]'
-      title={view.kind === 'list' ? 'Charms' : view.id === null ? 'New charm' : 'Edit charm'}
-      description="Your saved charms. Equip one, or create and edit charms. Escape goes back one step."
+      title={editing ? (editing.id === null ? 'New charm' : 'Edit charm') : manage ? 'Your charms' : 'Charms'}
+      description="Your saved charms. Create, edit, duplicate and delete them; equip one from the charm card. Escape goes back one step."
       className="[--modal-max:36rem]"
     >
-      {view.kind === 'edit' ? (
+      {editing ? (
         <CharmEditor
           data={data}
-          draft={view.draft}
+          draft={editing.draft}
           onDraft={(draft) => patchEdit({ draft })}
-          chooser={view.chooser}
+          chooser={editing.chooser}
           onChooser={(chooser) => patchEdit({ chooser })}
-          problem={draftProblem(view.draft, charms.length, view.id === null)}
+          problem={draftProblem(editing.draft, charms.length, saveAsNew)}
           error={saveError}
-          isNew={view.id === null}
-          onCancel={backToList}
+          isNew={editing.id === null}
+          conflict={conflict}
+          discarding={editing.discarding}
+          onKeep={() => patchEdit({ discarding: false })}
+          onDiscard={backToList}
+          onCancel={requestBack}
           onSave={() => {
-            const r = onSave(draftInput(view.draft), view.id)
+            const r = onSave(draftInput(editing.draft), saveAsNew ? null : editing.id)
             if (r.ok) backToList()
             else setSaveError(r.errors.join('; '))
           }}
@@ -157,10 +222,10 @@ export function CharmPicker({
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2 border-b p-4">
-            <Button autoFocus data-autofocus disabled={charms.length >= MAX_CHARMS} onClick={newCharm}>
+            <Button autoFocus data-autofocus data-new-charm disabled={charms.length >= MAX_CHARMS} onClick={() => openEditor(null, null)}>
               New charm
             </Button>
-            {equippedId !== null && (
+            {!manage && equippedId !== null && (
               <Button variant="outline" onClick={() => onEquip(null)}>
                 No charm
               </Button>
@@ -179,9 +244,14 @@ export function CharmPicker({
               {copyError}
             </p>
           )}
-          {issueCount > 0 && (
-            <p className="border-b px-4 py-2 text-xs text-muted-foreground">
-              {issueCount} stored {issueCount === 1 ? 'entry' : 'entries'} could not be loaded. The original was kept in a backup in this browser.
+          {loadNotice.storageUnavailable && (
+            <p role="alert" className="border-b px-4 py-2 text-xs text-destructive">
+              Browser storage is unavailable or unreadable, so charm changes will not be saved.
+            </p>
+          )}
+          {loadNotice.unreadable > 0 && (
+            <p role="status" className="border-b px-4 py-2 text-xs text-muted-foreground">
+              Some saved charms could not be loaded. A copy of the original is kept in your browser storage.
             </p>
           )}
           {charms.length === 0 ? (
@@ -195,22 +265,23 @@ export function CharmPicker({
                   key={c.id}
                   charm={c}
                   equipped={c.id === equippedId}
+                  manage={manage}
                   treeName={treeName}
                   confirming={confirming === c.id}
-                  onConfirm={(on) => setConfirming(on ? c.id : null)}
+                  onConfirm={(on) => {
+                    pendingFocus.current = on ? `[data-confirm="${c.id}"]` : `[data-delete="${c.id}"]`
+                    setConfirming(on ? c.id : null)
+                  }}
                   onEquip={() => {
                     onEquip(c.id)
                     onClose()
                   }}
-                  onEdit={() => setView({ kind: 'edit', id: c.id, draft: draftOf(c), chooser: null })}
+                  onEdit={() => openEditor(c.id, c)}
                   onCopy={() => {
                     const r = onCopy(c.id)
                     setCopyError(r.ok ? null : r.errors.join('; '))
                   }}
-                  onDelete={() => {
-                    setConfirming(null)
-                    onDelete(c.id)
-                  }}
+                  onDelete={() => deleteRow(c.id)}
                 />
               ))}
             </ul>

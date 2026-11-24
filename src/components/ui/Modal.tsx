@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { displayHeading } from '@/components/layout/Section'
+import { isBackdropClose } from '@/lib/backdrop'
 import { cn } from '@/lib/utils'
 
 /**
@@ -17,6 +18,7 @@ export function Modal({
   title,
   description,
   fallbackFocus,
+  closeOnBackdrop = true,
   children,
   className,
 }: {
@@ -28,12 +30,15 @@ export function Modal({
   description?: string
   /** CSS selector for where focus lands when the opener no longer exists on close. */
   fallbackFocus?: string
+  /** False while closing would lose work (an unsaved draft): a backdrop click then does nothing. */
+  closeOnBackdrop?: boolean
   children: ReactNode
   className?: string
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const opener = useRef<Element | null>(null)
   const id = useId()
+  const pressed = useRef<EventTarget | null>(null)
 
   useEffect(() => {
     const d = ref.current
@@ -68,8 +73,13 @@ export function Modal({
         ;(onEscape ?? onClose)()
       }}
       onClose={onClose}
-      // Only a click on the dialog element itself (the area around the panel) is a backdrop click.
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      // A backdrop click is a press and a click that both landed on the dialog element itself (see isBackdropClose).
+      onPointerDown={(e) => (pressed.current = e.target)}
+      onClick={(e) => {
+        const backdrop = isBackdropClose(pressed.current, e.target, e.currentTarget)
+        pressed.current = null
+        if (backdrop && closeOnBackdrop) onClose()
+      }}
     >
       {open && (
         <div className={cn('modal-panel', className)}>

@@ -1,7 +1,17 @@
-import { Swords } from 'lucide-react'
+import { Gem, Swords } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { PLAY_STYLES, Segmented, type PlayStyle } from './Segmented'
 
-export function Header({ style, onStyle }: { style: PlayStyle; onStyle: (s: PlayStyle) => void }) {
+export function Header({
+  style,
+  onStyle,
+  onCharms,
+}: {
+  style: PlayStyle
+  onStyle: (s: PlayStyle) => void
+  /** Opens the charm list in manage mode; undefined while the data is not ready. */
+  onCharms?: () => void
+}) {
   return (
     <header className="border-b bg-surface">
       <div className="mx-auto flex max-w-[1440px] items-center gap-3 px-4 py-3">
@@ -12,6 +22,10 @@ export function Header({ style, onStyle }: { style: PlayStyle; onStyle: (s: Play
           <div className="hidden lg:block">
             <Segmented value={style} onChange={onStyle} options={PLAY_STYLES} label="Hunter class" />
           </div>
+          <Button variant="outline" size="sm" disabled={!onCharms} onClick={onCharms}>
+            <Gem aria-hidden />
+            <span className="font-display text-sm font-semibold uppercase tracking-[0.08em]">Charms</span>
+          </Button>
         </div>
       </div>
     </header>

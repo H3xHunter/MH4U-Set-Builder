@@ -80,3 +80,24 @@ export function findSkills(trees: readonly SkillTree[], query: string, exclude: 
     .filter((t) => !exclude.includes(t.id) && t.name.toLowerCase().includes(q))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
+
+/** True when the draft differs from where the editor started (name, skills, points, slots; row order counts). */
+export const isDirty = (draft: CharmDraft, start: CharmDraft): boolean =>
+  draft.name !== start.name ||
+  draft.slots !== start.slots ||
+  draft.rows.length !== start.rows.length ||
+  draft.rows.some((r, i) => r.skillId !== start.rows[i].skillId || r.points !== start.rows[i].points)
+
+/**
+ * Whether the charm being edited changed under the editor (another tab): `base` is the charm as the editor opened it,
+ * `current` the charm now in the list. A new charm (no base) never conflicts.
+ */
+export function editConflict(base: SavedCharm | null, current: SavedCharm | undefined): 'deleted' | 'changed' | null {
+  if (base === null) return null
+  if (!current) return 'deleted'
+  return JSON.stringify(charmSkillEntries(base)) === JSON.stringify(charmSkillEntries(current)) &&
+    base.name === current.name &&
+    base.slots === current.slots
+    ? null
+    : 'changed'
+}

@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useReducer, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { ARMOR_SLOTS, type ArmorSlot, type GameData, type SavedCharm } from '@/data/types'
 import {
   addCharm,
+  CHARMS_KEY,
   deleteCharm,
   duplicateCharm,
   loadCharms,
@@ -42,7 +43,7 @@ export function slotTotals(build: BuildState, derived: DerivedBuild, ctx: BuildC
 }
 
 export function useBuild(data: GameData) {
-  const [loaded] = useState(() => loadCharms(data))
+  const [loaded, setLoaded] = useState(() => loadCharms(data))
   const [charms, setCharmsState] = useState<SavedCharm[]>(loaded.charms)
   const [storageError, setStorageError] = useState<string | null>(null)
   const ctx = useMemo<BuildContext>(() => ({ data, charms }), [data, charms])
@@ -58,6 +59,20 @@ export function useBuild(data: GameData) {
     },
     [data],
   )
+
+  // Another tab changed the saved charms: take its list through the same validating loader.
+  // The build is normalized afterwards, so a charm that no longer exists is unequipped.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== CHARMS_KEY) return // null: storage was cleared
+      const next = loadCharms(data)
+      setLoaded(next)
+      setCharmsState(next.charms)
+      dispatch({ type: 'normalize' })
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [data])
 
   const derived = useMemo(() => deriveBuild(build, ctx), [build, ctx])
   const treeNames = useMemo(() => new Map(data.skills.map((t) => [t.id, t.name])), [data])

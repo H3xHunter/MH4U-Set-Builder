@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SavedCharm } from '@/data/types'
+import { CHARMS_KEY, loadCharms, saveCharms } from '@/lib/charms'
 import { loadRealData } from '@/data/real-data-fixture'
 import { emptyBuild, type BuildContext } from './build'
 import { deriveBuild } from './derive'
@@ -79,6 +80,35 @@ describe('useBuild reducer and helpers', () => {
       const after = makeReducer(edited)(s, { type: 'normalize' })
       expect(after.charm).toEqual({ charmId: 'c1', decos: [deco1.id] })
       expect(deriveBuild(after, edited).skills.find((r) => r.treeId === 118)?.charm).toBe(5)
+    })
+  })
+
+  describe('another tab changes the saved charms (what the storage listener does)', () => {
+    const mem = () => {
+      const m = new Map<string, string>()
+      return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) }
+    }
+    const a: SavedCharm = { id: 'a', name: '', slots: 2, skills: { '118': 3 } }
+    const b: SavedCharm = { id: 'b', name: 'B', slots: 1, skills: {} }
+
+    it('reloads through the validating loader; an equipped charm that vanished is unequipped, others stay', () => {
+      const st = mem()
+      saveCharms(data, [a, b], st)
+      const first = loadCharms(data, st).charms
+      let s = makeReducer({ data, charms: first })(emptyBuild(), { type: 'setCharm', charmId: 'a' })
+      saveCharms(data, [b], st) // the other tab deleted 'a'
+      const next = { data, charms: loadCharms(data, st).charms }
+      expect(makeReducer(next)(s, { type: 'normalize' }).charm.charmId).toBeNull()
+      s = makeReducer({ data, charms: first })(emptyBuild(), { type: 'setCharm', charmId: 'b' })
+      expect(makeReducer(next)(s, { type: 'normalize' })).toBe(s)
+    })
+
+    it('a corrupted value from the other tab loads as an empty list with an issue (never trusted)', () => {
+      const st = mem()
+      st.m.set(CHARMS_KEY, '{oops')
+      const r = loadCharms(data, st)
+      expect(r.charms).toEqual([])
+      expect(r.issues.length).toBeGreaterThan(0)
     })
   })
 })

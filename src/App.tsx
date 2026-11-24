@@ -9,15 +9,20 @@ import { useGameData } from '@/state/useGameData'
 export default function App() {
   const [gameData, retry] = useGameData()
   const [style, setStyle] = useState<PlayStyle>('blade')
+  const [manageRequest, setManageRequest] = useState(0)
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <Header style={style} onStyle={setStyle} />
+      <Header
+        style={style}
+        onStyle={setStyle}
+        onCharms={gameData.status === 'ready' ? () => setManageRequest((n) => n + 1) : undefined}
+      />
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-4">
         {gameData.status === 'loading' && <LoadingState />}
         {gameData.status === 'error' && <ErrorState error={gameData.error} onRetry={retry} />}
         {gameData.status === 'ready' && (
-          <Builder data={gameData.data} style={style} onStyle={setStyle} />
+          <Builder data={gameData.data} style={style} onStyle={setStyle} manageRequest={manageRequest} />
         )}
       </main>
       <Footer />

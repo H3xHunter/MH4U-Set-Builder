@@ -6,6 +6,8 @@ import {
   duplicateCharm,
   MAX_CHARMS,
   CHARMS_BACKUP_KEY,
+  CHARMS_BACKUP2_KEY,
+  summarizeIssues,
   CHARMS_KEY,
   createCharm,
   deleteCharm,
@@ -104,7 +106,7 @@ describe('loadCharms', () => {
   })
 
   it('reports a failing backup write instead of throwing', () => {
-    const st: StorageLike = { getItem: () => '{nope', setItem: () => { throw new Error('quota') } }
+    const st: StorageLike = { getItem: (k) => (k === CHARMS_KEY ? '{nope' : null), setItem: () => { throw new Error('quota') } }
     const r = loadCharms(data, st)
     expect(r.charms).toEqual([])
     expect(r.issues.some((i) => i.reason.includes('quota'))).toBe(true)
@@ -226,5 +228,60 @@ describe('limits and list operations', () => {
     expect(duplicateCharm(data, list, 'zz').ok).toBe(false)
     const full = Array.from({ length: MAX_CHARMS }, (_, i) => good(`c${i}`))
     expect(duplicateCharm(data, full, 'c0').ok).toBe(false)
+  })
+})
+
+describe('backups are never clobbered', () => {
+  it('a second, different bad value goes to the second key; the first backup stays', () => {
+    const st = memory({ [CHARMS_KEY]: '{first' })
+    loadCharms(data, st)
+    // the user then saves a good list, and later the value is corrupted again
+    saveCharms(data, [good('a')], st)
+    st.m.set(CHARMS_KEY, '{second')
+    loadCharms(data, st)
+    expect(st.m.get(CHARMS_BACKUP_KEY)).toBe('{first')
+    expect(st.m.get(CHARMS_BACKUP2_KEY)).toBe('{second')
+  })
+  it('the same bad value loaded again is not written twice, and saving a new charm does not touch the backup', () => {
+    const st = memory({ [CHARMS_KEY]: wrap([good('a')], { dataVersion: 9 }) })
+    const raw = st.m.get(CHARMS_KEY)!
+    loadCharms(data, st)
+    loadCharms(data, st)
+    saveCharms(data, [good('new')], st)
+    expect(st.m.get(CHARMS_BACKUP_KEY)).toBe(raw)
+    expect(st.m.has(CHARMS_BACKUP2_KEY)).toBe(false)
+  })
+})
+
+describe('summarizeIssues: every whole-list failure is visible', () => {
+  const blocked = () => {
+    const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, get: () => { throw new Error('blocked') } })
+    try {
+      return loadCharms(data)
+    } finally {
+      if (saved) Object.defineProperty(globalThis, 'localStorage', saved)
+      else delete (globalThis as { localStorage?: unknown }).localStorage
+    }
+  }
+  it.each([
+    ['broken JSON', '{nope'],
+    ['wrong dataVersion', wrap([good('a')], { dataVersion: 4 })],
+    ['unknown storage version', wrap([good('a')], { version: 2 })],
+    ['charms not an array', wrap({})],
+  ])('%s counts as unreadable', (_n, raw) => {
+    expect(summarizeIssues(loadCharms(data, memory({ [CHARMS_KEY]: raw })).issues)).toEqual({ unreadable: 1, storageUnavailable: false })
+  })
+  it('dropped entries are counted one by one', () => {
+    const raw = wrap([good('a'), 'junk', { id: 'b' }])
+    expect(summarizeIssues(loadCharms(data, memory({ [CHARMS_KEY]: raw })).issues).unreadable).toBe(2)
+  })
+  it('storage blocked or unreadable is reported as unavailable, not as unreadable charms', () => {
+    expect(summarizeIssues(blocked().issues)).toEqual({ unreadable: 0, storageUnavailable: true })
+    const st: StorageLike = { getItem: () => { throw new Error('denied') }, setItem: () => {} }
+    expect(summarizeIssues(loadCharms(data, st).issues)).toEqual({ unreadable: 0, storageUnavailable: true })
+  })
+  it('a clean load says nothing', () => {
+    expect(summarizeIssues(loadCharms(data, memory()).issues)).toEqual({ unreadable: 0, storageUnavailable: false })
   })
 })

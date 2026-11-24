@@ -5,6 +5,7 @@ import { CharmPicker } from '@/components/pickers/CharmPicker'
 import { ArmorPicker } from '@/components/pickers/ArmorPicker'
 import { WeaponPicker } from '@/components/pickers/WeaponPicker'
 import type { ArmorSlot, GameData } from '@/data/types'
+import { summarizeIssues } from '@/lib/charms'
 import { hunterTypeOfClass } from '@/lib/weaponClass'
 import { capacityOf, decosOf, findArmor, findDeco, resolveWeapon, type Target } from '@/state/build'
 import { useBuild } from '@/state/useBuild'
@@ -20,13 +21,29 @@ const targetOf = (key: CardKey): Target => (key === 'weapon' || key === 'charm' 
 
 const tabContent = 'min-w-0 data-[state=inactive]:hidden lg:data-[state=inactive]:block'
 
-export function Builder({ data, style, onStyle }: { data: GameData; style: PlayStyle; onStyle: (s: PlayStyle) => void }) {
+export function Builder({
+  data,
+  style,
+  onStyle,
+  manageRequest,
+}: {
+  data: GameData
+  style: PlayStyle
+  onStyle: (s: PlayStyle) => void
+  /** Counter bumped by the header's Charms button: each change opens the picker in manage mode. */
+  manageRequest: number
+}) {
   const b = useBuild(data)
   const [armorPick, setArmorPick] = useState<{ slot: ArmorSlot; open: boolean } | null>(null)
   const [decoPick, setDecoPick] = useState<{ key: CardKey; target: DecoTarget; open: boolean } | null>(null)
   // `session` is the React key: every open mounts a fresh picker that starts from the current weapon.
   const [weaponPick, setWeaponPick] = useState({ open: false, session: 0 })
-  const [charmPick, setCharmPick] = useState({ open: false, session: 0 })
+  const [charmPick, setCharmPick] = useState({ open: false, session: 0, manage: false })
+  const [seenRequest, setSeenRequest] = useState(manageRequest)
+  if (manageRequest !== seenRequest) {
+    setSeenRequest(manageRequest)
+    setCharmPick((p) => ({ open: true, session: p.session + 1, manage: true }))
+  }
   const treeName = (id: number | string) => b.treeNames.get(Number(id)) ?? `#${id}`
 
   const openDecoPicker = (key: CardKey) => {
@@ -71,7 +88,7 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
                 onPick={(slot) => setArmorPick({ slot, open: true })}
                 onAddDeco={openDecoPicker}
                 onPickWeapon={() => setWeaponPick((p) => ({ open: true, session: p.session + 1 }))}
-                onPickCharm={() => setCharmPick((p) => ({ open: true, session: p.session + 1 }))}
+                onPickCharm={() => setCharmPick((p) => ({ open: true, session: p.session + 1, manage: false }))}
               />
             </Rise>
           </TabsContent>
@@ -108,7 +125,8 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
         equippedId={b.build.charm.charmId}
         treeName={treeName}
         storageError={b.storageError}
-        issueCount={b.charmIssues.filter((i) => i.index !== undefined).length}
+        loadNotice={summarizeIssues(b.charmIssues)}
+        manage={charmPick.manage}
         onEquip={b.equipCharm}
         onSave={b.saveCharm}
         onDelete={b.removeCharm}

@@ -2,6 +2,7 @@ import type { GameData, SavedCharm, SkillPoints, SlotCount } from '@/data/types'
 
 export const CHARMS_KEY = 'mh4u-set-builder:charms'
 export const CHARMS_BACKUP_KEY = 'mh4u-set-builder:charms:backup'
+export const CHARMS_BACKUP2_KEY = 'mh4u-set-builder:charms:backup2'
 export const STORAGE_VERSION = 1
 export const MAX_RAW_BYTES = 200 * 1024
 export const MAX_CHARMS = 100
@@ -18,6 +19,10 @@ export interface CharmIssue {
   /** Index in the stored list, when the issue concerns one entry. */
   index?: number
   reason: string
+  /** Browser storage could not be read at all (unavailable or blocked). */
+  storage?: true
+  /** Only says where the copy of the original went; not a problem with the data itself. */
+  backup?: true
 }
 
 export interface CharmInput {
@@ -89,12 +94,12 @@ export function loadCharms(
   data: GameData,
   storage: StorageLike | null = defaultStorage(),
 ): { charms: SavedCharm[]; issues: CharmIssue[] } {
-  if (!storage) return { charms: [], issues: [{ reason: 'browser storage is unavailable' }] }
+  if (!storage) return { charms: [], issues: [{ reason: 'browser storage is unavailable', storage: true }] }
   let raw: string | null
   try {
     raw = storage.getItem(CHARMS_KEY)
   } catch (e) {
-    return { charms: [], issues: [{ reason: `could not read storage: ${reasonOf(e)}` }] }
+    return { charms: [], issues: [{ reason: `could not read storage: ${reasonOf(e)}`, storage: true }] }
   }
   if (raw === null) return { charms: [], issues: [] }
 
@@ -128,12 +133,26 @@ export function loadCharms(
   return { charms, issues: issues.length > 0 ? withBackup(storage, raw, issues) : issues }
 }
 
+/**
+ * Keeps a copy of a bad stored value. An existing backup is never overwritten: the first one stays in the
+ * backup key, a later different one goes to a second key (which only a later different value replaces).
+ */
 function withBackup(storage: StorageLike, raw: string, issues: CharmIssue[]): CharmIssue[] {
   try {
-    storage.setItem(CHARMS_BACKUP_KEY, raw)
-    return [...issues, { reason: 'the original stored value was saved to a backup' }]
+    const first = storage.getItem(CHARMS_BACKUP_KEY)
+    const key = first === null || first === raw ? CHARMS_BACKUP_KEY : CHARMS_BACKUP2_KEY
+    if (first !== raw) storage.setItem(key, raw)
+    return [...issues, { reason: 'the original stored value was saved to a backup', backup: true }]
   } catch (e) {
-    return [...issues, { reason: `could not save a backup of the original value: ${reasonOf(e)}` }]
+    return [...issues, { reason: `could not save a backup of the original value: ${reasonOf(e)}`, backup: true }]
+  }
+}
+
+/** What the UI tells the user about a load: unreadable charms (list or entries) and unusable storage. */
+export function summarizeIssues(issues: readonly CharmIssue[]): { unreadable: number; storageUnavailable: boolean } {
+  return {
+    unreadable: issues.filter((i) => !i.backup && !i.storage).length,
+    storageUnavailable: issues.some((i) => i.storage),
   }
 }
 

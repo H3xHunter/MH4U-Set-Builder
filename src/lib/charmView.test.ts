@@ -7,7 +7,9 @@ import {
   draftInput,
   draftOf,
   draftProblem,
+  editConflict,
   emptyDraft,
+  isDirty,
   findSkills,
   stepPoints,
   type CharmDraft,
@@ -89,5 +91,36 @@ describe('charmTier and findSkills', () => {
     expect(findSkills(trees, 'att').map((t) => t.name)).toEqual(['Attack Down', 'Attack Up'])
     expect(findSkills(trees, '', [2]).map((t) => t.name)).toEqual(['Attack Down', 'Zeta'])
     expect(findSkills(trees, 'nope')).toEqual([])
+  })
+})
+
+describe('isDirty and editConflict', () => {
+  const start = (): CharmDraft => ({ name: 'A', slots: 1, rows: [{ skillId: 1, points: 3 }] })
+  it('untouched is not dirty; edited then reverted is not dirty', () => {
+    expect(isDirty(start(), start())).toBe(false)
+    const edited = { ...start(), name: 'AB', rows: [{ skillId: 1, points: 4 }] }
+    expect(isDirty(edited, start())).toBe(true)
+    expect(isDirty({ ...edited, name: 'A', rows: [{ skillId: 1, points: 3 }] }, start())).toBe(false)
+  })
+  it('each field counts', () => {
+    expect(isDirty({ ...start(), slots: 2 }, start())).toBe(true)
+    expect(isDirty({ ...start(), rows: [{ skillId: 2, points: 3 }] }, start())).toBe(true)
+    expect(isDirty({ ...start(), rows: [...start().rows, { skillId: null, points: 1 }] }, start())).toBe(true)
+    expect(isDirty({ ...start(), rows: [] }, start())).toBe(true)
+  })
+  it('a new charm with any input is dirty, an empty one is not', () => {
+    expect(isDirty(emptyDraft(), emptyDraft())).toBe(false)
+    expect(isDirty({ ...emptyDraft(), name: 'x' }, emptyDraft())).toBe(true)
+    expect(isDirty({ ...emptyDraft(), slots: 1 }, emptyDraft())).toBe(true)
+    expect(isDirty({ ...emptyDraft(), rows: [{ skillId: null, points: 1 }] }, emptyDraft())).toBe(true)
+  })
+  it('editConflict: same, changed, deleted, and new', () => {
+    const base = charm({ id: 'a' })
+    expect(editConflict(base, { ...base })).toBeNull()
+    expect(editConflict(base, { ...base, skills: { '1': 9 } })).toBe('changed')
+    expect(editConflict(base, { ...base, slots: 3 })).toBe('changed')
+    expect(editConflict(base, { ...base, name: 'new' })).toBe('changed')
+    expect(editConflict(base, undefined)).toBe('deleted')
+    expect(editConflict(null, undefined)).toBeNull()
   })
 })
