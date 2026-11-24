@@ -45,6 +45,19 @@ def num(v, what):
     raise ConvertError(f"{what}: not an integer: {v!r}")
 
 
+DECO_ICON_RE = re.compile(r"Jewel-([A-Za-z]+)\.png")
+DECO_COLORS = frozenset({"blue", "cyan", "green", "grey", "orange", "pink", "purple", "red", "white", "yellow", "unknown"})
+
+
+def deco_color(icon_name, what):
+    """items.icon_name 'Jewel-<Color>.png' -> lowercase color. Anything else fails; the filename is never stored."""
+    m = DECO_ICON_RE.fullmatch(icon_name) if isinstance(icon_name, str) else None
+    color = m.group(1).lower() if m else None
+    if color not in DECO_COLORS:
+        raise ConvertError(f"{what}: unexpected decoration icon_name {icon_name!r} (expected Jewel-<Color>.png with a known color)")
+    return color
+
+
 def mapped(table, v, what):
     v = blank(v)
     if v is None:
@@ -140,10 +153,11 @@ def build(conn, warn):
             "materials": comps.get(r["_id"], [])})
 
     decorations = []
-    for r in rows(conn, "select i._id, i.name, d.num_slots from items i join decorations d on d._id=i._id "
+    for r in rows(conn, "select i._id, i.name, i.icon_name, d.num_slots from items i join decorations d on d._id=i._id "
                         "where i.type='Decoration' order by i._id"):
         pts, _ = split_skills(r["_id"])
-        decorations.append({"id": r["_id"], "name": r["name"], "size": r["num_slots"], "skills": pts})
+        decorations.append({"id": r["_id"], "name": r["name"], "size": r["num_slots"], "skills": pts,
+                            "color": deco_color(r["icon_name"], f"decoration {r['_id']}")})
 
     weapons = []
     for r in rows(conn, "select i._id, i.name, i.sub_type, i.rarity, w.* from items i "

@@ -1,5 +1,6 @@
 import {
   ARMOR_SLOTS,
+  DECORATION_COLORS,
   GENDERS,
   HUNTER_TYPES,
   MATERIAL_KINDS,
@@ -192,6 +193,7 @@ const validateDecoration: Check<Decoration> = (v, p) => {
     name: field(o, p, 'name', str),
     size: field(o, p, 'size', intIn(1, 3)),
     skills: field(o, p, 'skills', skillPoints),
+    color: field(o, p, 'color', oneOf(DECORATION_COLORS)),
   }
 }
 

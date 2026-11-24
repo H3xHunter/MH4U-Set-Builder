@@ -34,7 +34,7 @@ const armor = (slot: ArmorSlot, skills: Record<string, number>, torsoUp = false)
   rarity: 1,
   materials: [],
 })
-const deco = (skills: Record<string, number>, size = 1): Decoration => ({ id: 1, name: 'd', size, skills })
+const deco = (skills: Record<string, number>, size = 1): Decoration => ({ id: 1, name: 'd', size, skills, color: 'red' })
 const piece = (slot: ArmorSlot, skills: Record<string, number>, decorations: Decoration[] = [], torsoUp = false) => ({
   armor: armor(slot, skills, torsoUp),
   decorations,

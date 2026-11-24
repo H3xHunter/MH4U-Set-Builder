@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import convert  # noqa: E402
 
 SCHEMA = """
-create table items(_id integer primary key, name text, type text, sub_type text default '', rarity integer default 1);
+create table items(_id integer primary key, name text, type text, sub_type text default '', rarity integer default 1, icon_name text default '');
 create table armor(_id integer primary key, slot text, defense int, max_defense int, fire_res int, thunder_res int,
   dragon_res int, water_res int, ice_res int, gender text, hunter_type text, num_slots int);
 create table decorations(_id integer primary key, num_slots int);
@@ -47,7 +47,7 @@ def make_db(path, mutate=None):
     c.executemany("insert into skills values(?,?,?,?,?)", [
         (1, 1, 1, "Torso Up", ""), (2, 2, 20, "Attack Up (L)", "Greatly"), (3, 2, -10, "Attack Down (S)", ""),
         (4, 2, 10, "Attack Up (S)", "Slightly")])
-    c.executemany("insert into items values(?,?,?,?,?)", [
+    c.executemany("insert into items(_id,name,type,sub_type,rarity) values(?,?,?,?,?)", [
         (10, "Ore", "Ore", "", 2), (11, "Scale", "Scale", "", 3),
         (20, "Rathalos Mail", "Armor", "Body", 5), (21, "Plain Cap", "Armor", "Head", 1),
         (22, "Odd Earring", "Armor", "Head", 1), (23, "Alloy Greaves", "Armor", "Legs", 4),
@@ -64,6 +64,7 @@ def make_db(path, mutate=None):
         (22, "Head", 34, 81, 0, 0, 0, 0, 0, "", "", 0),
         (23, "Legs", 8, 114, 0, 0, 0, 0, 0, "Female", "Gunner", 2)])
     c.executemany("insert into decorations values(?,?)", [(30, 2)])
+    c.execute("update items set icon_name='Jewel-Red.png' where _id=30")
     c.executemany("insert into item_to_skill_tree(item_id,skill_tree_id,point_value) values(?,?,?)", [
         (20, 2, 2), (20, 3, -2), (23, 1, 1), (23, 2, 0), (30, 2, 1), (30, 3, -1)])
     c.executemany("insert into components(created_item_id,component_item_id,quantity,type) values(?,?,?,?)", [
@@ -145,6 +146,29 @@ class ConvertTests(Base):
         self.assertEqual({a["id"]: a for a in d["armor"]}[20]["skills"], {"2": 2, "3": -2})
         self.assertEqual(d["decorations"][0]["skills"], {"2": 1, "3": -1})
         self.assertEqual(d["decorations"][0]["size"], 2)
+
+    def test_decoration_color(self):
+        d = self.run_convert()
+        self.assertEqual(d["decorations"][0]["color"], "red")
+        self.assertNotIn("Jewel-", json.dumps(d))
+
+    def test_decoration_color_unknown(self):
+        d = self.run_convert(lambda c: c.execute("update items set icon_name='Jewel-Unknown.png' where _id=30"))
+        self.assertEqual(d["decorations"][0]["color"], "unknown")
+
+    def test_deco_color_mapping(self):
+        for color in ("Blue", "Cyan", "Green", "Grey", "Orange", "Pink", "Purple", "Red", "White", "Yellow", "Unknown"):
+            self.assertEqual(convert.deco_color(f"Jewel-{color}.png", "x"), color.lower())
+
+    def test_bad_decoration_icon_fails(self):
+        for bad in ("Jewel-Magenta.png", "jewel-red.png", "Jewel-Red.jpg", "Jewel-Red.png\n", "Jewel-.png", "", None, "x/Jewel-Red.png"):
+            with self.subTest(bad=bad), self.assertRaises(convert.ConvertError):
+                convert.deco_color(bad, "x")
+
+    def test_bad_decoration_icon_fails_conversion(self):
+        with self.assertRaises(convert.ConvertError) as cm:
+            self.run_convert(lambda c: c.execute("update items set icon_name='Jewel-Magenta.png' where _id=30"))
+        self.assertIn("decoration 30", str(cm.exception))
 
     def test_slot_mapping_and_blank_to_null(self):
         d = self.run_convert()

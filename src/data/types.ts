@@ -15,6 +15,21 @@ export type MaterialKind = (typeof MATERIAL_KINDS)[number]
 export const RANKS = ['LR', 'HR', 'G'] as const
 export type Rank = (typeof RANKS)[number]
 
+export const DECORATION_COLORS = [
+  'blue',
+  'cyan',
+  'green',
+  'grey',
+  'orange',
+  'pink',
+  'purple',
+  'red',
+  'white',
+  'yellow',
+  'unknown',
+] as const
+export type DecorationColor = (typeof DECORATION_COLORS)[number]
+
 export const QUEST_KINDS = ['quest', 'arena'] as const
 export type QuestKind = (typeof QUEST_KINDS)[number]
 
@@ -70,6 +85,7 @@ export interface Decoration {
   name: string
   size: number
   skills: SkillPoints
+  color: DecorationColor
 }
 
 export interface WeaponElement {

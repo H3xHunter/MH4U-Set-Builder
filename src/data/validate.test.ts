@@ -42,7 +42,7 @@ const fixture = (): Fx => ({
       materials: [{ itemId: 100, quantity: 1, kind: 'create' }],
     },
   ],
-  decorations: [{ id: 20, name: 'Jewel', size: 1, skills: { '1': 1 } }],
+  decorations: [{ id: 20, name: 'Jewel', size: 1, skills: { '1': 1 }, color: 'red' }],
   weapons: [weapon(30, null), weapon(31, 30)],
   horn: [{ notes: 'WBR', song: 'W', effect1: 'e', effect2: 'f', duration: '1', extension: '2' }],
   materials: [
@@ -103,6 +103,8 @@ describe('validateGameData', () => {
     ['unsorted tiers', (d) => d.skills[0].tiers.reverse(), 'skills[0].tiers[1].points'],
     ['duplicate tier threshold', (d) => (d.skills[0].tiers[1].points = -10), 'skills[0].tiers[1].points'],
     ['dangling tree id', (d) => (d.armor[0].skills = { '1': 1, '9': 1 }), 'armor[0].skills.9'],
+    ['missing decoration color', (d) => delete d.decorations[0].color, 'decorations[0].color'],
+    ['invalid decoration color', (d) => (d.decorations[0].color = 'Jewel-Red.png'), 'decorations[0].color'],
     ['dangling tree id in decoration', (d) => (d.decorations[0].skills = { '7': 1 }), 'decorations[0].skills.7'],
     ['duplicate id', (d) => d.armor.push({ ...d.armor[0] }), 'armor[1].id'],
     ['duplicate quest (kind,id)', (d) => d.quests.push({ ...d.quests[0] }), 'quests[2].id'],

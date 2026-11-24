@@ -39,7 +39,12 @@ from `skills.required_skill_tree_points`). `description` is English text or null
 - There is **no rank (LR/HR/G) on armor**; the source does not store it.
 
 ## decorations.json
-`[{id, name, size, skills}]`. `size` = slots used. `skills` as in armor (negatives kept).
+`[{id, name, size, skills, color}]`. `size` = slots used. `skills` as in armor (negatives kept).
+`color`: `blue | cyan | green | grey | orange | pink | purple | red | white | yellow | unknown`, taken from the source
+`items.icon_name` (`Jewel-<Color>.png`, lowercased; the filename itself is not stored). The color is the jewel's icon
+color in the source. It follows the skill tree, not the size or rarity (checked: no skill tree with positive points
+has two colors), so the UI can use it to pick a jewel icon. `unknown` is the source's own "Jewel-Unknown" value (2
+decorations). The converter fails if `icon_name` does not match the pattern or the color is not in this set.
 
 ## weapons.json
 `[{id, name, class, parentId, final, rarity, attack, maxAttack, affinity, affinityOptions, element, element2,

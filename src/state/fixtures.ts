@@ -23,6 +23,7 @@ export const mkDeco = (id: number, size: number, skills: Record<string, number> 
   name: `deco${id}`,
   size,
   skills,
+  color: 'red',
 })
 
 export const mkWeapon = (id: number, slots: number, over: Partial<Weapon> = {}): Weapon => ({
