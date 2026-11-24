@@ -6,7 +6,7 @@ export type IconScale = 0.5 | 1 | 2 | 3 | 4
 
 export type GameIconProps = { scale?: IconScale } & (
   | { kind: 'armor'; slot: ArmorSlot; rarity: number }
-  | { kind: 'weapon'; weaponClass: string; rarity: number }
+  | { kind: 'weapon'; weaponClass: string; /** Omit for an untinted base icon. */ rarity?: number }
   | { kind: 'decoration'; color: DecorationColor }
   | { kind: 'charm' }
 )
@@ -26,8 +26,8 @@ function describe(p: GameIconProps): { url: string | undefined; tint: string | n
     case 'weapon':
       return {
         url: weaponIcon(p.weaponClass),
-        tint: validRarity(p.rarity) ? `var(--rarity-${p.rarity})` : null,
-        alt: `${p.weaponClass}, rarity ${p.rarity}`,
+        tint: p.rarity !== undefined && validRarity(p.rarity) ? `var(--rarity-${p.rarity})` : null,
+        alt: p.rarity === undefined ? p.weaponClass : `${p.weaponClass}, rarity ${p.rarity}`,
         size: ICON_SIZE.weapon,
       }
     case 'decoration':

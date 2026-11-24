@@ -40,7 +40,7 @@ function IconBox({ armor, slot }: { armor: Armor | null; slot: Props['slot'] }) 
   )
 }
 
-function DecoRow({ decos, capacity, label, treeName, onAddDeco, onRemoveDeco }: Pick<Props, 'decos' | 'capacity' | 'label' | 'treeName' | 'onAddDeco' | 'onRemoveDeco'>) {
+export function DecoRow({ decos, capacity, label, treeName, onAddDeco, onRemoveDeco }: Pick<Props, 'decos' | 'capacity' | 'label' | 'treeName' | 'onAddDeco' | 'onRemoveDeco'>) {
   const used = decos.reduce((n, d) => n + d.size, 0)
   const free = Math.max(0, capacity - used)
   if (capacity === 0) return <p className="text-xs text-muted-foreground">No decoration slots</p>

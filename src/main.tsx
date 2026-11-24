@@ -5,13 +5,14 @@ import App from './App'
 
 // Dev-only: `import.meta.env.DEV` is replaced by `false` in the build, so the chunk is dropped.
 const IconGallery = import.meta.env.DEV ? lazy(() => import('./dev/IconGallery')) : null
-const showGallery = IconGallery !== null && location.hash === '#icons'
+const SkillGallery = import.meta.env.DEV ? lazy(() => import('./dev/SkillGallery')) : null
+const Gallery = location.hash === '#icons' ? IconGallery : location.hash === '#skills' ? SkillGallery : null
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {showGallery && IconGallery ? (
+    {Gallery ? (
       <Suspense fallback={null}>
-        <IconGallery />
+        <Gallery />
       </Suspense>
     ) : (
       <App />

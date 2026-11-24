@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DecorationPicker, type DecoTarget } from '@/components/pickers/DecorationPicker'
 import { ArmorPicker } from '@/components/pickers/ArmorPicker'
+import { WeaponPicker } from '@/components/pickers/WeaponPicker'
 import type { ArmorSlot, GameData } from '@/data/types'
-import { decosOf, findArmor, findDeco } from '@/state/build'
+import { hunterTypeOfClass } from '@/lib/weaponClass'
+import { capacityOf, decosOf, findArmor, findDeco, resolveWeapon, type Target } from '@/state/build'
 import { useBuild } from '@/state/useBuild'
 import { EquipmentPanel } from './EquipmentPanel'
 import { Rise } from './Rise'
@@ -12,22 +14,31 @@ import { SkillsPanel } from './SkillsPanel'
 import { StatsPanels } from './StatsPanels'
 
 // Mobile shows one tab at a time; from lg up every tab is shown as a column.
+type CardKey = ArmorSlot | 'weapon'
+const targetOf = (key: CardKey): Target => (key === 'weapon' ? { kind: 'weapon' } : { kind: 'armor', slot: key })
+
 const tabContent = 'min-w-0 data-[state=inactive]:hidden lg:data-[state=inactive]:block'
 
 export function Builder({ data, style, onStyle }: { data: GameData; style: PlayStyle; onStyle: (s: PlayStyle) => void }) {
   const b = useBuild(data)
   const [armorPick, setArmorPick] = useState<{ slot: ArmorSlot; open: boolean } | null>(null)
-  const [decoPick, setDecoPick] = useState<{ target: DecoTarget; slot: ArmorSlot; open: boolean } | null>(null)
+  const [decoPick, setDecoPick] = useState<{ key: CardKey; target: DecoTarget; open: boolean } | null>(null)
+  // `session` is the React key: every open mounts a fresh picker that starts from the current weapon.
+  const [weaponPick, setWeaponPick] = useState({ open: false, session: 0 })
   const treeName = (id: number | string) => b.treeNames.get(Number(id)) ?? `#${id}`
 
-  const openDecoPicker = (slot: ArmorSlot) => {
-    const sel = b.build.armor[slot]
-    const armor = sel && findArmor(b.ctx, sel.armorId)
-    if (!armor) return
-    const used = decosOf(b.build, { kind: 'armor', slot }).reduce((n, id) => n + (findDeco(b.ctx, id)?.size ?? 0), 0)
-    setDecoPick({ slot, open: true, target: { name: armor.name, used, capacity: armor.slots } })
+  const openDecoPicker = (key: CardKey) => {
+    const target = targetOf(key)
+    const capacity = capacityOf(b.build, target, b.ctx)
+    const used = decosOf(b.build, target).reduce((n, id) => n + (findDeco(b.ctx, id)?.size ?? 0), 0)
+    const name =
+      key === 'weapon'
+        ? (resolveWeapon(b.build, b.ctx)?.name ?? 'Custom weapon')
+        : (findArmor(b.ctx, b.build.armor[key]?.armorId ?? -1)?.name ?? '')
+    setDecoPick({ key, open: true, target: { name, used, capacity } })
   }
   const closeArmor = () => setArmorPick((p) => p && { ...p, open: false })
+  const closeWeapon = () => setWeaponPick((p) => ({ ...p, open: false }))
   const closeDeco = () => setDecoPick((p) => p && { ...p, open: false })
 
   return (
@@ -45,7 +56,7 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
           {/* hidden={false}: Radix sets the hidden attribute on inactive panels, which would beat lg:block. */}
           <TabsContent value="skills" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:order-1`}>
             <Rise delay={0}>
-              <SkillsPanel />
+              <SkillsPanel b={b} />
             </Rise>
           </TabsContent>
           <TabsContent value="equipment" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:order-2`}>
@@ -54,6 +65,7 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
                 b={b}
                 onPick={(slot) => setArmorPick({ slot, open: true })}
                 onAddDeco={openDecoPicker}
+                onPickWeapon={() => setWeaponPick((p) => ({ open: true, session: p.session + 1 }))}
               />
             </Rise>
           </TabsContent>
@@ -74,12 +86,30 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
       />
       <DecorationPicker
         pick={decoPick}
-        returnTo={decoPick?.slot}
+        returnTo={decoPick?.key}
         onClose={closeDeco}
         data={data}
-        fits={(id) => !!decoPick && b.canAddDeco({ kind: 'armor', slot: decoPick.slot }, id)}
+        fits={(id) => !!decoPick && b.canAddDeco(targetOf(decoPick.key), id)}
         treeName={treeName}
-        onPick={(id) => decoPick && b.addDeco({ kind: 'armor', slot: decoPick.slot }, id)}
+        onPick={(id) => decoPick && b.addDeco(targetOf(decoPick.key), id)}
+      />
+      <WeaponPicker
+        key={weaponPick.session}
+        open={weaponPick.open}
+        onClose={closeWeapon}
+        data={data}
+        hunter={style}
+        current={b.build.weapon}
+        onPickWeapon={(w) => {
+          b.dispatch({ type: 'setWeapon', weapon: { kind: 'data', weaponId: w.id } })
+          const type = hunterTypeOfClass(w.class)
+          if (type) onStyle(type)
+          closeWeapon()
+        }}
+        onPickCustom={(slots) => {
+          b.dispatch({ type: 'setWeapon', weapon: { kind: 'slots', slots } })
+          closeWeapon()
+        }}
       />
     </>
   )

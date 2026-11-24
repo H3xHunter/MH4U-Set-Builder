@@ -1,8 +1,9 @@
 import { EquipmentCard } from '@/components/equipment/EquipmentCard'
+import { WeaponCard } from '@/components/equipment/WeaponCard'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ARMOR_SLOTS, type ArmorSlot } from '@/data/types'
-import { decosOf, findArmor, findDeco } from '@/state/build'
+import { capacityOf, decosOf, findArmor, findDeco, resolveWeapon } from '@/state/build'
 import type { useBuild } from '@/state/useBuild'
 import { Section, displayHeading } from './Section'
 
@@ -13,13 +14,18 @@ export function EquipmentPanel({
   b,
   onPick,
   onAddDeco,
+  onPickWeapon,
 }: {
   b: ReturnType<typeof useBuild>
   onPick: (slot: ArmorSlot) => void
-  onAddDeco: (slot: ArmorSlot) => void
+  onAddDeco: (key: ArmorSlot | 'weapon') => void
+  onPickWeapon: () => void
 }) {
   const treeName = (id: number | string) => b.treeNames.get(Number(id)) ?? `#${id}`
-  const empty = { armor: null, decos: [], capacity: 0, treeName, disabled: true, onChange: noop, onRemove: noop, onAddDeco: noop, onRemoveDeco: noop }
+  const charmEmpty = { armor: null, decos: [], capacity: 0, treeName, disabled: true, onChange: noop, onRemove: noop, onAddDeco: noop, onRemoveDeco: noop }
+  const weaponTarget = { kind: 'weapon' } as const
+  const weaponSel = b.build.weapon
+  const weaponData = resolveWeapon(b.build, b.ctx)
   return (
     <Section
       title="Equipment"
@@ -36,11 +42,36 @@ export function EquipmentPanel({
             Pick a weapon to set your class (Blademaster or Gunner) and its slots, or jump straight to armor. Skills
             fill in as you go.
           </p>
-          <Button disabled>Choose a weapon</Button>
+          <Button onClick={onPickWeapon}>Choose a weapon</Button>
         </div>
       </Card>
       <ul className="space-y-2">
-        <EquipmentCard label="Weapon" slot="weapon" {...empty} />
+        {weaponSel.kind === 'none' ? (
+          <EquipmentCard
+            label="Weapon"
+            slot="weapon"
+            armor={null}
+            decos={[]}
+            capacity={0}
+            treeName={treeName}
+            onChange={onPickWeapon}
+            onRemove={noop}
+            onAddDeco={noop}
+            onRemoveDeco={noop}
+          />
+        ) : (
+          <WeaponCard
+            weapon={weaponData}
+            customSlots={weaponSel.kind === 'slots' ? weaponSel.slots : 0}
+            decos={decosOf(b.build, weaponTarget).flatMap((id) => findDeco(b.ctx, id) ?? [])}
+            capacity={capacityOf(b.build, weaponTarget, b.ctx)}
+            treeName={treeName}
+            onChange={onPickWeapon}
+            onRemove={() => b.dispatch({ type: 'setWeapon', weapon: { kind: 'none' } })}
+            onAddDeco={() => onAddDeco('weapon')}
+            onRemoveDeco={(i) => b.removeDeco(weaponTarget, i)}
+          />
+        )}
         {ARMOR_SLOTS.map((slot) => {
           const sel = b.build.armor[slot]
           const armor = sel ? findArmor(b.ctx, sel.armorId) : null
@@ -61,7 +92,7 @@ export function EquipmentPanel({
             />
           )
         })}
-        <EquipmentCard label="Charm" slot="charm" {...empty} />
+        <EquipmentCard label="Charm" slot="charm" {...charmEmpty} />
       </ul>
     </Section>
   )

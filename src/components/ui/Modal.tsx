@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 export function Modal({
   open,
   onClose,
+  onEscape,
   title,
   description,
   fallbackFocus,
@@ -21,6 +22,8 @@ export function Modal({
 }: {
   open: boolean
   onClose: () => void
+  /** If given, Esc calls this instead of onClose (e.g. to step back inside a picker). */
+  onEscape?: () => void
   title: ReactNode
   description?: string
   /** CSS selector for where focus lands when the opener no longer exists on close. */
@@ -51,10 +54,18 @@ export function Modal({
       className="modal"
       aria-labelledby={`${id}-title`}
       aria-describedby={description ? `${id}-desc` : undefined}
-      // Esc: take over the native close so React state stays the single source of truth.
+      // With onEscape, handle the key itself: the native `cancel` event is only cancelable after a user
+      // activation, so without this a second Esc (or one before any click) would close the dialog regardless.
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && onEscape) {
+          e.preventDefault()
+          onEscape()
+        }
+      }}
+      // Esc otherwise: take over the native close so React state stays the single source of truth.
       onCancel={(e) => {
         e.preventDefault()
-        onClose()
+        ;(onEscape ?? onClose)()
       }}
       onClose={onClose}
       // Only a click on the dialog element itself (the area around the panel) is a backdrop click.

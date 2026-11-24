@@ -38,8 +38,8 @@ export interface SkillRow {
  * Positive p: highest tier with 0 < threshold <= p.
  * Negative p: tier with the most negative threshold such that p <= threshold < 0.
  */
-export function activeTier(tiers: SkillTree['tiers'], p: number): ActiveTier | null {
-  let best: SkillTree['tiers'][number] | null = null
+export function activeTier(tiers: readonly ActiveTier[], p: number): ActiveTier | null {
+  let best: ActiveTier | null = null
   for (const t of tiers) {
     const hit = p > 0 ? t.points > 0 && t.points <= p : p < 0 && t.points < 0 && p <= t.points
     if (!hit) continue

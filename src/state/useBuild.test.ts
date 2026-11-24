@@ -31,4 +31,19 @@ describe('useBuild reducer and helpers', () => {
     const s = reduce(emptyBuild(), { type: 'setArmor', slot: 'head', armorId: head.id })
     expect(reduce(s, { type: 'normalize' })).toBe(s)
   })
+
+  it('weapon: slots count in the totals, armor stays when the weapon changes, removing the weapon drops its decorations', () => {
+    let s = reduce(emptyBuild(), { type: 'setArmor', slot: 'head', armorId: head.id })
+    s = reduce(s, { type: 'setWeapon', weapon: { kind: 'slots', slots: 2 } })
+    expect(slotTotals(s, deriveBuild(s, ctx), ctx)).toEqual({ used: 0, capacity: 4 })
+    const deco = data.decorations.find((d) => d.size === 2)!
+    s = reduce(s, { type: 'addDeco', target: { kind: 'weapon' }, decoId: deco.id })
+    expect(slotTotals(s, deriveBuild(s, ctx), ctx)).toEqual({ used: 2, capacity: 4 })
+    const gunner = data.weapons.find((w) => w.class === 'Bow')!
+    s = reduce(s, { type: 'setWeapon', weapon: { kind: 'data', weaponId: gunner.id } })
+    expect(s.armor.head?.armorId).toBe(head.id)
+    s = reduce(s, { type: 'setWeapon', weapon: { kind: 'none' } })
+    expect(s.weaponDecos).toEqual([])
+    expect(s.armor.head?.armorId).toBe(head.id)
+  })
 })

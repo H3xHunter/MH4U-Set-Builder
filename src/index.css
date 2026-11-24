@@ -209,7 +209,7 @@ html:has(dialog[open]) {
     inset: 50% auto auto 50%;
     translate: -50% -50%;
     width: 100%;
-    max-width: 42rem;
+    max-width: var(--modal-max, 42rem);
     height: min(720px, 85dvh);
     border-bottom: 1px solid hsl(var(--border));
     border-radius: 0.75rem;
@@ -239,5 +239,135 @@ html:has(dialog[open]) {
   }
   .modal[open]::backdrop {
     animation: fade-only 100ms linear both;
+  }
+}
+
+/* Skill bars (src/components/skills). Colors come from tokens; geometry only via React style props (left/width in %). */
+.sk-track {
+  position: relative;
+  height: 10px;
+  border-radius: 3px;
+  background: hsl(var(--border) / 0.7);
+}
+.sk-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transition:
+    left 200ms ease-out,
+    width 200ms ease-out;
+}
+.sk-base {
+  background: hsl(var(--skill-positive));
+}
+.sk-torso {
+  background: repeating-linear-gradient(135deg, hsl(var(--torso-up-extra)) 0 3px, hsl(var(--torso-up-extra) / 0.45) 3px 6px);
+}
+.sk-deco {
+  background: repeating-linear-gradient(45deg, hsl(var(--deco-total)) 0 3px, hsl(var(--deco-total) / 0.4) 3px 6px);
+}
+.sk-decoNegative {
+  background: repeating-linear-gradient(45deg, hsl(var(--skill-negative)) 0 3px, hsl(var(--skill-negative) / 0.4) 3px 6px);
+}
+.sk-penalty {
+  background: hsl(var(--skill-negative));
+}
+.sk-rail {
+  position: absolute;
+  bottom: -5px;
+  height: 2px;
+  background: hsl(var(--skill-negative));
+}
+.sk-tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+}
+.sk-tick-base {
+  background: hsl(var(--foreground));
+}
+.sk-tick-deco {
+  background: hsl(var(--deco-total));
+}
+.sk-tick-none {
+  background: hsl(var(--muted-foreground) / 0.55);
+}
+.sk-tick-active {
+  background: hsl(var(--skill-negative));
+}
+.sk-tick-cleared {
+  width: 6px;
+  background: transparent;
+  border: 2px solid hsl(var(--skill-negative));
+}
+.sk-tick-top {
+  width: 4px;
+}
+
+@keyframes sk-label-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sk-pop {
+  0% {
+    transform: translateX(-50%) scaleY(1);
+    box-shadow: 0 0 0 0 hsl(var(--deco-total) / 0.6);
+  }
+  35% {
+    transform: translateX(-50%) scaleY(1.5);
+    box-shadow: 0 0 0 5px hsl(var(--deco-total) / 0.35);
+  }
+  100% {
+    transform: translateX(-50%) scaleY(1);
+    box-shadow: 0 0 0 0 hsl(var(--deco-total) / 0);
+  }
+}
+@keyframes sk-dim {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 0.25;
+  }
+}
+@keyframes sk-flash {
+  from {
+    background: hsl(var(--deco-total) / 0.2);
+  }
+  to {
+    background: hsl(var(--deco-total) / 0);
+  }
+}
+.sk-label-in {
+  animation: sk-label-in 220ms ease-out both;
+}
+.sk-pop {
+  animation: sk-pop 500ms ease-out both;
+}
+.sk-dimmed {
+  animation: sk-dim 500ms ease-out both;
+}
+.sk-flash {
+  animation: sk-flash 700ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-seg {
+    transition: none;
+  }
+  .sk-label-in,
+  .sk-pop,
+  .sk-dimmed,
+  .sk-flash {
+    animation: none;
   }
 }
