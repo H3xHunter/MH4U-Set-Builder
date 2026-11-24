@@ -210,3 +210,13 @@ export interface GameData {
   quests: Quest[]
   items: Item[]
 }
+
+export type SlotCount = 0 | 1 | 2 | 3
+
+/** A user-made charm (see src/lib/charms.ts). */
+export interface SavedCharm {
+  id: string
+  name: string
+  slots: SlotCount
+  skills: SkillPoints
+}

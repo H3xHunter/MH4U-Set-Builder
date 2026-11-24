@@ -1,0 +1,176 @@
+import type { GameData, SavedCharm, SkillPoints, SlotCount } from '@/data/types'
+
+export const CHARMS_KEY = 'mh4u-set-builder:charms'
+export const CHARMS_BACKUP_KEY = 'mh4u-set-builder:charms:backup'
+export const STORAGE_VERSION = 1
+export const MAX_RAW_BYTES = 200 * 1024
+export const MAX_CHARMS = 200
+
+// Technical sanity bounds only, NOT game rules. The maximum number of skills per charm
+// and the maximum points per skill are unverified game rules and intentionally not enforced.
+const MAX_SKILL_ENTRIES = 8
+const MAX_ABS_POINTS = 99
+
+export type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
+
+export interface CharmIssue {
+  /** Index in the stored list, when the issue concerns one entry. */
+  index?: number
+  reason: string
+}
+
+export interface CharmInput {
+  name: string
+  slots: number
+  skills: Record<string, number>
+}
+
+export type CharmResult = { ok: true; charm: SavedCharm } | { ok: false; errors: string[] }
+export type CharmListResult = { ok: true; charms: SavedCharm[] } | { ok: false; errors: string[] }
+
+/** Reading `globalThis.localStorage` itself can throw (blocked site data, some private modes). */
+function defaultStorage(): StorageLike | null {
+  try {
+    return globalThis.localStorage ?? null
+  } catch {
+    return null
+  }
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+const reasonOf = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+/** Validates one charm (id included). Names are opaque text, never interpreted as HTML. */
+export function validateCharmInput(data: GameData, input: unknown): CharmResult {
+  if (!isObj(input)) return { ok: false, errors: ['charm must be an object'] }
+  const errors: string[] = []
+  const { id, name, slots, skills } = input
+
+  if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+    errors.push('id must be 1 to 64 characters of A-Z, a-z, 0-9, _ or -')
+  }
+  const trimmed = typeof name === 'string' ? name.trim() : ''
+  if (typeof name !== 'string' || trimmed.length < 1 || trimmed.length > 40) {
+    errors.push('name must be 1 to 40 characters after trimming')
+  }
+  if (!Number.isInteger(slots) || (slots as number) < 0 || (slots as number) > 3) {
+    errors.push('slots must be an integer from 0 to 3')
+  }
+
+  const points: SkillPoints = {}
+  if (!isObj(skills)) {
+    errors.push('skills must be an object')
+  } else {
+    const keys = Object.keys(skills)
+    if (keys.length > MAX_SKILL_ENTRIES) errors.push(`skills has more than ${MAX_SKILL_ENTRIES} entries`)
+    const known = new Set(data.skills.map((t) => String(t.id)))
+    for (const k of keys) {
+      const v = skills[k]
+      if (k === String(data.meta.torsoUpTreeId)) errors.push(`skills.${k}: the Torso Up tree cannot be on a charm`)
+      else if (!known.has(k)) errors.push(`skills.${k}: unknown skill tree`)
+      else if (!Number.isInteger(v) || v === 0 || Math.abs(v as number) > MAX_ABS_POINTS) {
+        errors.push(`skills.${k}: points must be a nonzero integer with absolute value at most ${MAX_ABS_POINTS}`)
+      } else points[k] = v as number
+    }
+  }
+
+  // A slot-only charm (no skills) is valid and intended.
+  if (errors.length === 0 && slots === 0 && Object.keys(points).length === 0) {
+    errors.push('a charm needs at least 1 slot or at least 1 skill')
+  }
+  if (errors.length > 0) return { ok: false, errors }
+  return { ok: true, charm: { id: id as string, name: trimmed, slots: slots as SlotCount, skills: points } }
+}
+
+/** Never throws. Anything dropped or rejected is first copied, verbatim, to the backup key. */
+export function loadCharms(
+  data: GameData,
+  storage: StorageLike | null = defaultStorage(),
+): { charms: SavedCharm[]; issues: CharmIssue[] } {
+  if (!storage) return { charms: [], issues: [{ reason: 'browser storage is unavailable' }] }
+  let raw: string | null
+  try {
+    raw = storage.getItem(CHARMS_KEY)
+  } catch (e) {
+    return { charms: [], issues: [{ reason: `could not read storage: ${reasonOf(e)}` }] }
+  }
+  if (raw === null) return { charms: [], issues: [] }
+
+  const issues: CharmIssue[] = []
+  const charms: SavedCharm[] = []
+  const rejectAll = (reason: string) => {
+    issues.push({ reason })
+    return { charms: [], issues: withBackup(storage, raw, issues) }
+  }
+
+  if (raw.length > MAX_RAW_BYTES) return rejectAll(`stored charms are larger than ${MAX_RAW_BYTES / 1024} KB`)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return rejectAll('stored charms are not valid JSON')
+  }
+  if (!isObj(parsed) || parsed.version !== STORAGE_VERSION) return rejectAll('unknown storage version')
+  if (parsed.dataVersion !== data.meta.dataVersion) return rejectAll('charms were saved for a different data version')
+  if (!Array.isArray(parsed.charms)) return rejectAll('stored charm list is not an array')
+
+  const seen = new Set<string>()
+  parsed.charms.forEach((entry: unknown, index) => {
+    const r = validateCharmInput(data, entry)
+    if (!r.ok) return void issues.push({ index, reason: r.errors.join('; ') })
+    if (seen.has(r.charm.id)) return void issues.push({ index, reason: `duplicate id ${r.charm.id}` })
+    if (charms.length >= MAX_CHARMS) return void issues.push({ index, reason: `more than ${MAX_CHARMS} charms` })
+    seen.add(r.charm.id)
+    charms.push(r.charm)
+  })
+  return { charms, issues: issues.length > 0 ? withBackup(storage, raw, issues) : issues }
+}
+
+function withBackup(storage: StorageLike, raw: string, issues: CharmIssue[]): CharmIssue[] {
+  try {
+    storage.setItem(CHARMS_BACKUP_KEY, raw)
+    return [...issues, { reason: 'the original stored value was saved to a backup' }]
+  } catch (e) {
+    return [...issues, { reason: `could not save a backup of the original value: ${reasonOf(e)}` }]
+  }
+}
+
+export function saveCharms(
+  data: GameData,
+  charms: SavedCharm[],
+  storage: StorageLike | null = defaultStorage(),
+): { ok: true } | { ok: false; reason: string } {
+  if (!storage) return { ok: false, reason: 'browser storage is unavailable' }
+  try {
+    storage.setItem(CHARMS_KEY, JSON.stringify({ version: STORAGE_VERSION, dataVersion: data.meta.dataVersion, charms }))
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, reason: reasonOf(e) }
+  }
+}
+
+const defaultId = (): string =>
+  typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
+
+export function createCharm(data: GameData, input: CharmInput, makeId: () => string = defaultId): CharmResult {
+  return validateCharmInput(data, { ...input, id: makeId() })
+}
+
+/** Returns a new list with the charm replaced; the id itself cannot change. */
+export function updateCharm(
+  data: GameData,
+  charms: readonly SavedCharm[],
+  id: string,
+  changes: Partial<CharmInput>,
+): CharmListResult {
+  const current = charms.find((c) => c.id === id)
+  if (!current) return { ok: false, errors: [`no charm with id ${id}`] }
+  const r = validateCharmInput(data, { ...current, ...changes, id })
+  if (!r.ok) return r
+  return { ok: true, charms: charms.map((c) => (c.id === id ? r.charm : c)) }
+}
+
+export const deleteCharm = (charms: readonly SavedCharm[], id: string): SavedCharm[] =>
+  charms.filter((c) => c.id !== id)

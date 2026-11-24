@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { SkillTree } from '@/data/types'
-import { applyAction, emptyBuild, type Action, type BuildContext, type SavedCharm } from './build'
+import { applyAction, emptyBuild, type Action, type BuildContext } from './build'
 import { deriveBuild } from './derive'
+import type { SavedCharm } from '@/data/types'
 import { mkArmor, mkData, mkDeco, mkWeapon } from './fixtures'
 
 const trees: SkillTree[] = [{ id: 1, name: 'T', tiers: [{ points: 5, name: 'T5', description: null }] }]

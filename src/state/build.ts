@@ -4,18 +4,11 @@ import {
   type ArmorSlot,
   type Decoration,
   type GameData,
+  type SavedCharm,
   type Weapon,
+  type SlotCount,
 } from '@/data/types'
 import { canAdd } from '@/lib/slots'
-
-export type SlotCount = 0 | 1 | 2 | 3
-
-export interface SavedCharm {
-  id: string
-  name: string
-  slots: SlotCount
-  skills: Record<string, number>
-}
 
 export type WeaponSelection =
   | { kind: 'none' }

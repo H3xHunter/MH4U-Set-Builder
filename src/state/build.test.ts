@@ -8,8 +8,8 @@ import {
   type Action,
   type BuildContext,
   type BuildState,
-  type SavedCharm,
 } from './build'
+import type { SavedCharm } from '@/data/types'
 import { mkArmor, mkData, mkDeco, mkWeapon } from './fixtures'
 
 const charm = (slots: SavedCharm['slots'], id = 'c1'): SavedCharm => ({ id, name: id, slots, skills: {} })
