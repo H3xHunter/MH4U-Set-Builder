@@ -163,17 +163,61 @@
   }
 }
 
-/* Dialog motion, keyed to Radix data-state (tw-animate-css is not installed). Transform composes with Tailwind's `translate`. */
-@keyframes fade-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
+/* Scroll lock for the native modal <dialog> without any runtime style injection (our CSP forbids it). */
+html {
+  scrollbar-gutter: stable;
+}
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
+/* Modal (src/components/ui/Modal.tsx). The dialog fills the viewport and is transparent, so a click whose
+   target is the dialog itself is a backdrop click; the visible panel is its child. */
+.modal {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: hidden;
+}
+.modal::backdrop {
+  background: hsl(0 0% 0% / 0.6);
+}
+.modal-panel {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 92dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  border: 1px solid hsl(var(--border));
+  border-bottom: 0;
+  border-radius: 0.75rem 0.75rem 0 0;
+  background: hsl(var(--surface));
+  box-shadow: 0 10px 40px hsl(0 0% 0% / 0.5);
+}
+@media (min-width: 48rem) {
+  .modal-panel {
+    inset: 50% auto auto 50%;
+    translate: -50% -50%;
+    width: 100%;
+    max-width: 42rem;
+    height: min(720px, 85dvh);
+    border-bottom: 1px solid hsl(var(--border));
+    border-radius: 0.75rem;
   }
 }
 
-@keyframes dlg-in {
+/* Enter motion only; closing is instant (no JS timers, no allow-discrete). `translate` composes with `transform`. */
+@keyframes modal-in {
   from {
     opacity: 0;
     transform: translateY(6px) scale(0.985);
@@ -183,38 +227,17 @@
     transform: none;
   }
 }
-
-@keyframes dlg-out {
-  from {
-    opacity: 1;
-    transform: none;
-  }
-  to {
-    opacity: 0;
-    transform: translateY(6px) scale(0.985);
-  }
+.modal[open] .modal-panel {
+  animation: modal-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
-
-.dlg-overlay[data-state="open"] {
+.modal[open]::backdrop {
   animation: fade-only 150ms ease-out both;
 }
-.dlg-overlay[data-state="closed"] {
-  animation: fade-out 150ms ease-in both;
-}
-.dlg-content[data-state="open"] {
-  animation: dlg-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-.dlg-content[data-state="closed"] {
-  animation: dlg-out 180ms ease-in both;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .dlg-overlay[data-state="open"],
-  .dlg-content[data-state="open"] {
+  .modal[open] .modal-panel {
     animation: fade-only 100ms linear both;
   }
-  .dlg-overlay[data-state="closed"],
-  .dlg-content[data-state="closed"] {
-    animation: fade-out 100ms linear both;
+  .modal[open]::backdrop {
+    animation: fade-only 100ms linear both;
   }
 }

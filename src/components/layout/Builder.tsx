@@ -25,7 +25,7 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
     const armor = sel && findArmor(b.ctx, sel.armorId)
     if (!armor) return
     const used = decosOf(b.build, { kind: 'armor', slot }).reduce((n, id) => n + (findDeco(b.ctx, id)?.size ?? 0), 0)
-    setDecoPick({ slot, open: true, target: { name: armor.name, used, capacity: armor.slots, returnTo: slot } })
+    setDecoPick({ slot, open: true, target: { name: armor.name, used, capacity: armor.slots } })
   }
   const closeArmor = () => setArmorPick((p) => p && { ...p, open: false })
   const closeDeco = () => setDecoPick((p) => p && { ...p, open: false })
@@ -74,6 +74,7 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
       />
       <DecorationPicker
         pick={decoPick}
+        returnTo={decoPick?.slot}
         onClose={closeDeco}
         data={data}
         fits={(id) => !!decoPick && b.canAddDeco({ kind: 'armor', slot: decoPick.slot }, id)}

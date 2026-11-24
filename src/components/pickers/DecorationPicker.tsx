@@ -2,10 +2,11 @@ import { memo, useMemo, useState } from 'react'
 import { DecoEffects, JewelCircles, type TreeName } from '@/components/equipment/parts'
 import { Segmented } from '@/components/layout/Segmented'
 import { Input } from '@/components/ui/input'
+import { Modal } from '@/components/ui/Modal'
 import type { Decoration, GameData } from '@/data/types'
 import { filterDecos } from '@/lib/decoFilter'
 import { cn } from '@/lib/utils'
-import { keyHint, PickerShell } from './PickerShell'
+import { keyHint } from './pickerStyles'
 import { useListbox } from './useListbox'
 
 const SIZE_OPTIONS = [
@@ -20,8 +21,6 @@ export interface DecoTarget {
   name: string
   used: number
   capacity: number
-  /** Focus-return key (matches the card's data-trigger). */
-  returnTo: string
 }
 
 const DecoRow = memo(function DecoRow({
@@ -113,8 +112,8 @@ function Body({
           <span className="font-mono text-xs text-slot-used">Free here {free}</span>
         </p>
         <Input
-          type="search"
-          autoFocus
+          type="text"
+          data-autofocus
           placeholder="Search by decoration or skill"
           aria-label="Search by decoration name or skill"
           value={query}
@@ -171,6 +170,7 @@ function Body({
 /** `pick` keeps its target while `open` is false, so the content stays during the closing animation. */
 export function DecorationPicker({
   pick,
+  returnTo,
   onClose,
   data,
   fits,
@@ -178,6 +178,8 @@ export function DecorationPicker({
   onPick,
 }: {
   pick: { target: DecoTarget; open: boolean } | null
+  /** data-trigger of the card's Change button: focus goes there if the free-slot button that opened us is gone. */
+  returnTo?: string
   onClose: () => void
   data: GameData
   fits: (decoId: number) => boolean
@@ -186,10 +188,11 @@ export function DecorationPicker({
 }) {
   const target = pick?.target
   return (
-    <PickerShell
+    <Modal
       open={pick?.open ?? false}
-      onOpenChange={(o) => !o && onClose()}
-      returnTo={target?.returnTo ?? ''}
+      onClose={onClose}
+      fallbackFocus={returnTo && `[data-trigger="${returnTo}"]`}
+      description="Search and filter, then choose with the keyboard or mouse."
       title="Choose decoration"
     >
       {target && (
@@ -204,6 +207,6 @@ export function DecorationPicker({
           }}
         />
       )}
-    </PickerShell>
+    </Modal>
   )
 }

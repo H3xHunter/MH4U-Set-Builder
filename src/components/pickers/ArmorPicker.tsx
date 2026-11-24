@@ -2,11 +2,12 @@ import { memo, useMemo, useState } from 'react'
 import { RarityBadge, SkillChip, SlotRings, type TreeName } from '@/components/equipment/parts'
 import { Segmented, type PlayStyle } from '@/components/layout/Segmented'
 import { Input } from '@/components/ui/input'
+import { Modal } from '@/components/ui/Modal'
 import type { Armor, ArmorSlot, GameData } from '@/data/types'
 import { filterArmor, type ClassFilter } from '@/lib/armorFilter'
 import { rarityTextColor } from '@/lib/rarity'
 import { cn } from '@/lib/utils'
-import { keyHint, PickerShell, selectClass } from './PickerShell'
+import { keyHint, selectClass } from './pickerStyles'
 import { useListbox } from './useListbox'
 
 const CLASS_OPTIONS = [
@@ -102,8 +103,8 @@ function Body({
     <>
       <div className="space-y-3 border-b p-4">
         <Input
-          type="search"
-          autoFocus
+          type="text"
+          data-autofocus
           placeholder="Search by piece or skill"
           aria-label="Search by piece name or skill"
           value={query}
@@ -170,10 +171,10 @@ export function ArmorPicker({
 }) {
   const slot = pick?.slot
   return (
-    <PickerShell
+    <Modal
       open={pick?.open ?? false}
-      onOpenChange={(o) => !o && onClose()}
-      returnTo={slot ?? ''}
+      onClose={onClose}
+      description="Search and filter, then choose with the keyboard or mouse."
       title={
         <>
           <span className="uppercase">{slot} slot</span>, Choose armor
@@ -192,6 +193,6 @@ export function ArmorPicker({
           }}
         />
       )}
-    </PickerShell>
+    </Modal>
   )
 }
