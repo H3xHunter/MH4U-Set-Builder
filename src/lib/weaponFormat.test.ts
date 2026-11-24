@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { loadRealData } from '@/data/real-data-fixture'
 import { mkWeapon } from '@/state/fixtures'
-import { elementParts, formatAffinity, isDoubleAffinity } from './weaponFormat'
+import { elementColor, elementParts, formatAffinity, isDoubleAffinity } from './weaponFormat'
 
 describe('weaponFormat', () => {
   it('formats single affinity with the real minus sign', () => {
@@ -44,5 +44,14 @@ describe('weaponFormat', () => {
     for (const w of weapons) expect(formatAffinity(w)).not.toBe('—')
     expect(weapons.filter((w) => elementParts(w).length === 0)).toHaveLength(633)
     expect(weapons.filter((w) => w.awaken)).toHaveLength(375)
+  })
+
+  it('element dot colors: the five elements have tokens, statuses do not', () => {
+    expect(elementColor('Fire')).toBe('var(--element-fire)')
+    expect(elementColor('Thunder')).toBe('var(--element-thunder)')
+    for (const status of ['Poison', 'Blastblight', 'Paralysis', 'Sleep']) expect(elementColor(status)).toBeUndefined()
+    const { weapons } = loadRealData()
+    const types = new Set(weapons.flatMap((w) => elementParts(w).map((p) => p.type)))
+    expect([...types].filter((t) => elementColor(t)).sort()).toEqual(['Dragon', 'Fire', 'Ice', 'Thunder', 'Water'])
   })
 })

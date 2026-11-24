@@ -4,7 +4,7 @@ import { displayHeading } from '@/components/layout/Section'
 import { Button } from '@/components/ui/button'
 import type { Decoration, Weapon } from '@/data/types'
 import { rarityTextColor } from '@/lib/rarity'
-import { elementParts, formatAffinity, isDoubleAffinity } from '@/lib/weaponFormat'
+import { elementColor, elementParts, formatAffinity, isDoubleAffinity } from '@/lib/weaponFormat'
 import { cn } from '@/lib/utils'
 import { DecoRow } from './EquipmentCard'
 import { RarityBadge, type TreeName } from './parts'
@@ -89,7 +89,7 @@ export function WeaponCard({ weapon, customSlots, ...p }: Props) {
                       e.kind !== 'element' && 'text-muted-foreground',
                     )}
                   >
-                    <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
+                    <span aria-hidden="true" className="size-1.5 rounded-full bg-current" style={{ backgroundColor: elementColor(e.type) }} />
                     {e.label}
                   </span>
                 ))}

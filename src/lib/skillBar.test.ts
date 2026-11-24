@@ -8,6 +8,7 @@ import {
   skillHint,
   skillRows,
   summarizeSkills,
+  summaryChips,
   type TierInfo,
 } from './skillBar'
 import type { SkillTree } from '@/data/types'
@@ -199,5 +200,27 @@ describe('skillRows and summarizeSkills', () => {
       expect(v.baseTier).toEqual(r.baseTier)
       expect(v.totalTier).toEqual(r.totalTier)
     }
+  })
+})
+
+describe('summaryChips', () => {
+  const v = (name: string, t: number[], shownBase: number, deco = 0) =>
+    buildSkillView({ treeId: name.charCodeAt(0), name, tiers: tiers(...t), shownBase, torsoUp: 0, deco })
+
+  it('active positive, near, and penalty chips; nothing for the rest', () => {
+    const chips = summaryChips([
+      v('Alpha', [10, 15], 12), // active T10, 3 away: tier chip only
+      v('Beta', [10], 9), // no tier, near: near chip only
+      v('Gamma', [-10, 10], -12), // active penalty
+      v('Delta', [10], 3), // nothing
+      v('Epsilon', [10, 15], 14), // active T10 and one point from T15: both chips
+    ])
+    expect(chips.map((c) => [c.kind, c.text])).toEqual([
+      ['active', 'T10 · 12'],
+      ['near', 'Beta · 9/10'],
+      ['penalty', 'T-10'],
+      ['active', 'T10 · 14'],
+      ['near', 'Epsilon · 14/15'],
+    ])
   })
 })

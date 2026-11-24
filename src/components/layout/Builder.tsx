@@ -71,7 +71,7 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
           </TabsContent>
           <TabsContent value="stats" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:order-3`}>
             <Rise delay={100}>
-              <StatsPanels />
+              <StatsPanels b={b} />
             </Rise>
           </TabsContent>
         </div>

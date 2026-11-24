@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { ARMOR_SLOTS, type ArmorSlot } from '@/data/types'
 import { capacityOf, decosOf, findArmor, findDeco, resolveWeapon } from '@/state/build'
 import type { useBuild } from '@/state/useBuild'
+import { MobileSummary } from './MobileSummary'
 import { Section, displayHeading } from './Section'
 
 const LABEL: Record<ArmorSlot, string> = { head: 'Head', chest: 'Chest', arms: 'Arms', waist: 'Waist', legs: 'Legs' }
@@ -35,6 +36,7 @@ export function EquipmentPanel({
         </span>
       }
     >
+      <MobileSummary b={b} />
       <Card className="mb-3 gap-3 py-4">
         <div className="space-y-3 px-4">
           <h3 className={displayHeading}>Start a set</h3>

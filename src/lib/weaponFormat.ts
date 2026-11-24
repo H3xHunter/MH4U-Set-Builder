@@ -31,3 +31,14 @@ export const elementParts = (w: Pick<Weapon, 'element' | 'element2' | 'awaken'>)
   ...part('element2', w.element2),
   ...part('awaken', w.awaken),
 ]
+
+const ELEMENT_TOKENS: Record<string, string> = {
+  fire: 'var(--element-fire)',
+  water: 'var(--element-water)',
+  thunder: 'var(--element-thunder)',
+  ice: 'var(--element-ice)',
+  dragon: 'var(--element-dragon)',
+}
+
+/** Dot color for the five elements; undefined for statuses (Poison and so on), which keep the text color. */
+export const elementColor = (type: string): string | undefined => ELEMENT_TOKENS[type.toLowerCase()]

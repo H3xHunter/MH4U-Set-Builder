@@ -13,6 +13,10 @@ describe('index.css tokens', () => {
     expect(defined(`rarity-text-${n}`)).toBe(true)
   })
 
+  it.each(['fire', 'water', 'thunder', 'ice', 'dragon'])('defines the %s element token', (e) => {
+    expect(defined(`element-${e}`)).toBe(true)
+  })
+
   it.each(DECORATION_COLORS)('defines the %s jewel token', (c) => {
     expect(defined(`jewel-${c}`)).toBe(true)
   })

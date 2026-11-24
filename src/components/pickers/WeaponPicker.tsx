@@ -11,7 +11,7 @@ import type { GameData, Weapon } from '@/data/types'
 import { rarityTextColor } from '@/lib/rarity'
 import { cn } from '@/lib/utils'
 import { BLADEMASTER_CLASSES, GUNNER_CLASSES, hunterTypeOfClass, type WeaponClass, WEAPON_CLASSES } from '@/lib/weaponClass'
-import { elementParts, formatAffinity, isDoubleAffinity } from '@/lib/weaponFormat'
+import { elementColor, elementParts, formatAffinity, isDoubleAffinity } from '@/lib/weaponFormat'
 import {
   ancestorIds,
   buildWeaponTree,
@@ -175,7 +175,7 @@ function WeaponRow({
             ) : (
               elements.map((e) => (
                 <span key={e.kind} className={cn('inline-flex items-center gap-1', e.kind !== 'element' && 'text-muted-foreground')}>
-                  <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-current" style={{ backgroundColor: elementColor(e.type) }} />
                   {e.label}
                 </span>
               ))

@@ -254,3 +254,30 @@ export function skillAriaLabel(v: SkillView): string {
   if (v.hint.text) parts.push(v.hint.text.replace(' · ', ', '))
   return parts.join(', ')
 }
+
+export interface SummaryChip {
+  key: string
+  kind: 'active' | 'near' | 'penalty'
+  text: string
+}
+
+/**
+ * Chips for the mobile summary: an active positive tier ("<tier> · <total>"), a skill one point short of its next
+ * tier ("<skill> · <total>/<next threshold>"), an active penalty tier (its name). A skill can yield two chips
+ * (an active tier that is also one point from the next). Skills with none of these get no chip.
+ */
+export function summaryChips(views: readonly SkillView[]): SummaryChip[] {
+  const chips: SummaryChip[] = []
+  for (const v of views) {
+    if (v.totalTier && v.totalTier.points > 0) {
+      chips.push({ key: `a${v.treeId}`, kind: 'active', text: `${v.totalTier.name} · ${formatPoints(v.total)}` })
+    } else if (v.totalTier && v.totalTier.points < 0) {
+      chips.push({ key: `p${v.treeId}`, kind: 'penalty', text: v.totalTier.name })
+    }
+    if (v.hint.near) {
+      const next = v.tiers.find((t) => t.points > v.total)
+      if (next) chips.push({ key: `n${v.treeId}`, kind: 'near', text: `${v.name} · ${formatPoints(v.total)}/${next.points}` })
+    }
+  }
+  return chips
+}

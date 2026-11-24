@@ -65,6 +65,12 @@
   --rarity-text-8: #1fa58f;
   --rarity-text-9: #f58a1f;
   --rarity-text-10: #e94ade;
+  /* Element dots (placeholders). */
+  --element-fire: #ff8a3d;
+  --element-water: #4da3ff;
+  --element-thunder: #f2d200;
+  --element-ice: #7fd6f0;
+  --element-dragon: #b28cff;
   --jewel-blue: #3b6fe0;
   --jewel-cyan: #2ec4d6;
   --jewel-green: #3fae49;
