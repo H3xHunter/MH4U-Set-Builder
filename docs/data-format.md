@@ -17,7 +17,7 @@ General rules
 `dataVersion` (int, 1), `sourceUrl`, `sourceCommit`, `dbSha256` (SHA-256 of the input DB file), `license`
 (MIT notice text; applies to the app source, game data is Capcom's), `torsoUpTreeId` (original id of the skill tree
 named "Torso Up"), `counts` (records per file: armor, decorations, horn, locations, materials, monsters, skills,
-weapons). No timestamp.
+weapons, quests, items). No timestamp.
 
 ## skills.json
 `[{id, name, tiers:[{points, name, description}]}]`. Tiers ascending by `points` (negative values allowed; they come
@@ -29,28 +29,33 @@ from `skills.required_skill_tree_points`). `description` is English text or null
 - `slot`: `head | chest | arms | waist | legs` (source "Body" is `chest`).
 - `hunterType`: `blade | gunner | both | null`. `gender`: `male | female | both | null`.
   Null means the source was blank (one piece: Hawkeye Earring, id 3753; a warning is logged).
-- `slots`: decoration capacity 0-3. `defense`, `maxDefense`: as stored (`maxDefense` meaning unverified).
+- `slots`: decoration capacity 0-3. `defense`: integer, as stored. `maxDefense`: number | null (null on 41 armor pieces; meaning unknown, do not infer).
 - `res`: `{fire, water, thunder, ice, dragon}` integers.
 - `skills`: `{treeId: points}`, non-zero only, negatives kept, Torso Up never listed.
 - `torsoUp`: true if the source piece had the Torso Up tree.
 - `rarity`: as stored in items.
 - `materials`: `[{itemId, quantity, kind}]`, `kind` is `create | createA | createB | improve` (from `components.type`; the
-  meaning of A/B is unverified). Order follows the source row order. Item ids refer to `materials.json`.
+  meaning of A/B is unverified). Only `create` appears in the current data; the other values are allowed. Order follows the source row order. Item ids refer to `materials.json`.
 - There is **no rank (LR/HR/G) on armor**; the source does not store it.
 
 ## decorations.json
-`[{id, name, size, skills}]`. `size` = slots used. `skills` as in armor (negatives kept).
+`[{id, name, size, skills, color}]`. `size` = slots used. `skills` as in armor (negatives kept).
+`color`: `blue | cyan | green | grey | orange | pink | purple | red | white | yellow | unknown`, taken from the source
+`items.icon_name` (`Jewel-<Color>.png`, lowercased; the filename itself is not stored). The color is the jewel's icon
+color in the source. It follows the skill tree, not the size or rarity (checked: no skill tree with positive points
+has two colors), so the UI can use it to pick a jewel icon. `unknown` is the source's own "Jewel-Unknown" value (2
+decorations). The converter fails if `icon_name` does not match the pattern or the color is not in this set.
 
 ## weapons.json
-`[{id, name, class, parentId, treeDepth, final, rarity, attack, maxAttack, affinity, affinityOptions, element, element2,
+`[{id, name, class, parentId, final, rarity, attack, maxAttack, affinity, affinityOptions, element, element2,
 awaken, defenseBonus, sharpness, slots, hornNotes, extra}]`
 - `class`: source sub_type (e.g. "Great Sword", "Sword and Shield", "Light Bowgun").
 - `parentId`: previous weapon in the upgrade tree, or null (the source uses 0 for "none"; ids start at 1).
-- `final`: boolean. `attack`, `maxAttack` (null when blank): as stored; whether they equal in-game displayed attack is unverified.
+- `final`: boolean. `attack`: integer. `maxAttack`: number | null (null for all weapons in the current data). Both as stored; whether they equal in-game displayed attack is unverified.
 - `affinity`: integer, or null when `affinityOptions` is set. Plain integer text -> that integer. Blank in the source is
   treated as 0 (owner-confirmed rule). Any other text makes the conversion fail.
 - `affinityOptions`: null, or `[a, b]` (in source order) when the source text is two integers such as "-45/20". The
-  weapon randomly applies one of these values (Chaotic Gore Magala weapons). The probability and the trigger are
+  weapon randomly applies one of these values (Chaotic Gore Magala weapons, quests, items). The probability and the trigger are
   unknown; consumers must not average them without a documented rule. Text that is not exactly two integers fails the
   conversion.
 - `element`, `element2`, `awaken`: `{type, value}` or null; `type` is the source text (e.g. "Fire", "Poison", "Blastblight").
@@ -69,11 +74,33 @@ awaken, defenseBonus, sharpness, slots, hornNotes, extra}]`
 (matching rules unverified). No id (source `_id` is not exposed).
 
 ## materials.json
-Only items used as armor materials. `[{id, name, rarity, drops, gathering}]`
+Only items used as armor materials. `[{id, name, rarity, drops, gathering, sources}]`
 - `drops`: `[{monsterId, rank, condition, percentage, stackSize}]` from `hunting_rewards`; `rank` is `LR | HR | G`;
   `percentage` can be null (4 source rows are blank).
 - `gathering`: `[{locationId, area, site, rank, quantity, percentage}]`.
-- Items can have neither (e.g. items sourced from quest rewards, shops or trades, which this file does not include).
+- `sources`: all other places the source data links the item. Stored as-is, no game rules applied. Every key is
+  always present; an empty array means "no link of that type". Order follows source row order.
+  - `quests`: `[{questId, slot, percentage, stackSize}]` from `quest_rewards` (`slot` is `reward_slot`). `questId`
+    refers to `quests.json` (kind `quest`). Quest rewards carry no LR/HR/G rank.
+  - `arena`: `[{arenaQuestId, percentage, stackSize}]` from `arena_rewards`; refers to `quests.json` (kind `arena`).
+  - `combining`: `[{item1Id, item2Id, amountMin, amountMax, percentage}]` where this material is the created item.
+    Ingredient ids refer to `items.json` or `materials.json`.
+  - `veggieElder`: `[{offerItemId, quantity}]` where this material is the received item (`receive_item_id`).
+  - `wyporium`: `[{itemInId, itemOutId, unlockQuestId}]` for rows where this material is on either side. The names
+    are the source column names (`item_in_id`, `item_out_id`). **Which side the player gives and which they receive
+    is unverified; do not label it in the UI.** A row whose both sides are materials appears under both. `unlockQuestId`
+    refers to `quests.json` (kind `quest`) or is null.
+- An item can still have no link at all (the converter reports how many).
+
+## quests.json
+Only quests referenced by `materials.sources` (reward quests, wyporium unlock quests, arena quests):
+`[{id, kind, name, hub, type, stars}]`. `kind` is `quest` (from `quests`) or `arena` (from `arena_quests`).
+The two kinds have **separate id spaces**: identify a record by `(kind, id)`. Arena records have `hub`, `type` and
+`stars` null (the source has no such columns). Sorted quests first, then arena, each by id.
+
+## items.json
+Items referenced by `materials.sources` that are not themselves armor materials (combining ingredients, wyporium
+counterparts, veggie offer items): `[{id, name, type, rarity}]`. Armor materials are in `materials.json`.
 
 ## monsters.json
 All monsters: `[{id, name, class, hitzones:[{part, cut, impact, shot, fire, water, ice, thunder, dragon, ko}]}]`.

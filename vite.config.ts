@@ -24,6 +24,8 @@ const cspMeta = (): Plugin => ({
 export default defineConfig({
   base: '/MH4U-Set-Builder/',
   plugins: [react(), tailwindcss(), cspMeta()],
+  // Fonts must stay real files: the CSP has no data: for fonts.
+  build: { assetsInlineLimit: (file) => (/\.woff2?$/.test(file) ? false : undefined) },
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   test: { environment: 'node', include: ['src/**/*.test.ts', 'src/**/*.test.tsx'] },
 })

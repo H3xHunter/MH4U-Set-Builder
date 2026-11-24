@@ -45,6 +45,19 @@ def num(v, what):
     raise ConvertError(f"{what}: not an integer: {v!r}")
 
 
+DECO_ICON_RE = re.compile(r"Jewel-([A-Za-z]+)\.png")
+DECO_COLORS = frozenset({"blue", "cyan", "green", "grey", "orange", "pink", "purple", "red", "white", "yellow", "unknown"})
+
+
+def deco_color(icon_name, what):
+    """items.icon_name 'Jewel-<Color>.png' -> lowercase color. Anything else fails; the filename is never stored."""
+    m = DECO_ICON_RE.fullmatch(icon_name) if isinstance(icon_name, str) else None
+    color = m.group(1).lower() if m else None
+    if color not in DECO_COLORS:
+        raise ConvertError(f"{what}: unexpected decoration icon_name {icon_name!r} (expected Jewel-<Color>.png with a known color)")
+    return color
+
+
 def mapped(table, v, what):
     v = blank(v)
     if v is None:
@@ -140,10 +153,11 @@ def build(conn, warn):
             "materials": comps.get(r["_id"], [])})
 
     decorations = []
-    for r in rows(conn, "select i._id, i.name, d.num_slots from items i join decorations d on d._id=i._id "
+    for r in rows(conn, "select i._id, i.name, i.icon_name, d.num_slots from items i join decorations d on d._id=i._id "
                         "where i.type='Decoration' order by i._id"):
         pts, _ = split_skills(r["_id"])
-        decorations.append({"id": r["_id"], "name": r["name"], "size": r["num_slots"], "skills": pts})
+        decorations.append({"id": r["_id"], "name": r["name"], "size": r["num_slots"], "skills": pts,
+                            "color": deco_color(r["icon_name"], f"decoration {r['_id']}")})
 
     weapons = []
     for r in rows(conn, "select i._id, i.name, i.sub_type, i.rarity, w.* from items i "
@@ -187,13 +201,69 @@ def build(conn, warn):
             {"locationId": r["location_id"], "area": blank(r["area"]), "site": blank(r["site"]),
              "rank": blank(r["rank"]), "quantity": num(r["quantity"], "gathering.quantity"),
              "percentage": num(r["percentage"], "gathering.percentage")})
-    items = {r["_id"]: r for r in rows(conn, "select _id, name, rarity from items")}
+    items = {r["_id"]: r for r in rows(conn, "select _id, name, type, rarity from items")}
+    mat_set = set(mat_ids)
+    src = {k: {} for k in ("quests", "arena", "combining", "veggieElder", "wyporium")}
+
+    def add(kind, item_id, rec):
+        src[kind].setdefault(item_id, []).append(rec)
+
+    for r in rows(conn, "select * from quest_rewards order by _id"):
+        if r["item_id"] in mat_set:
+            add("quests", r["item_id"], {"questId": r["quest_id"], "slot": blank(r["reward_slot"]),
+                                         "percentage": num(r["percentage"], "quest_rewards.percentage"),
+                                         "stackSize": r["stack_size"]})
+    for r in rows(conn, "select * from arena_rewards order by _id"):
+        if r["item_id"] in mat_set:
+            add("arena", r["item_id"], {"arenaQuestId": r["arena_id"],
+                                        "percentage": num(r["percentage"], "arena_rewards.percentage"),
+                                        "stackSize": r["stack_size"]})
+    for r in rows(conn, "select * from combining order by _id"):
+        if r["created_item_id"] in mat_set:
+            add("combining", r["created_item_id"], {
+                "item1Id": r["item_1_id"], "item2Id": r["item_2_id"],
+                "amountMin": num(r["amount_made_min"], "combining.amount_made_min"),
+                "amountMax": num(r["amount_made_max"], "combining.amount_made_max"),
+                "percentage": num(r["percentage"], "combining.percentage")})
+    for r in rows(conn, "select * from veggie_elder order by _id"):
+        if r["receive_item_id"] in mat_set:
+            add("veggieElder", r["receive_item_id"], {"offerItemId": r["offer_item_id"],
+                                                      "quantity": r["quantity"]})
+    for r in rows(conn, "select * from wyporium order by _id"):
+        rec = {"itemInId": r["item_in_id"], "itemOutId": r["item_out_id"],
+               "unlockQuestId": num(r["unlock_quest_id"], "wyporium.unlock_quest_id")}
+        # direction (which side the player gives) is unverified; keep column meaning only
+        for i in {r["item_in_id"], r["item_out_id"]} & mat_set:
+            add("wyporium", i, rec)
+
     materials = []
     for i in mat_ids:
         if i not in items:
             raise ConvertError(f"armor material item {i} does not exist in items")
         materials.append({"id": i, "name": items[i]["name"], "rarity": items[i]["rarity"],
-                          "drops": drops.get(i, []), "gathering": gather.get(i, [])})
+                          "drops": drops.get(i, []), "gathering": gather.get(i, []),
+                          "sources": {k: v.get(i, []) for k, v in src.items()}})
+
+    quest_ids, arena_ids, ref_items = set(), set(), set()
+    for m in materials:
+        s = m["sources"]
+        quest_ids |= {x["questId"] for x in s["quests"]}
+        quest_ids |= {x["unlockQuestId"] for x in s["wyporium"] if x["unlockQuestId"] is not None}
+        arena_ids |= {x["arenaQuestId"] for x in s["arena"]}
+        for x in s["combining"]:
+            ref_items |= {x["item1Id"], x["item2Id"]}
+        ref_items |= {x["offerItemId"] for x in s["veggieElder"]}
+        for x in s["wyporium"]:
+            ref_items |= {x["itemInId"], x["itemOutId"]}
+    ref_items -= mat_set
+    quests = [{"id": r["_id"], "kind": "quest", "name": r["name"], "hub": blank(r["hub"]),
+               "type": blank(r["type"]), "stars": r["stars"]}
+              for r in rows(conn, "select _id, name, hub, type, stars from quests order by _id")
+              if r["_id"] in quest_ids]
+    quests += [{"id": r["_id"], "kind": "arena", "name": r["name"], "hub": None, "type": None, "stars": None}
+               for r in rows(conn, "select _id, name from arena_quests order by _id") if r["_id"] in arena_ids]
+    ref_item_recs = [{"id": i, "name": items[i]["name"], "type": blank(items[i]["type"]),
+                      "rarity": items[i]["rarity"]} for i in sorted(ref_items) if i in items]
 
     hz = {}
     for r in rows(conn, "select * from monster_damage order by _id"):
@@ -208,7 +278,8 @@ def build(conn, warn):
     locations = [{"id": r["_id"], "name": r["name"]}
                  for r in rows(conn, "select _id, name from locations order by _id") if r["_id"] in loc_ids]
     files = {"skills": skills, "armor": armor, "decorations": decorations, "weapons": weapons,
-             "horn": horn, "materials": materials, "monsters": monsters, "locations": locations}
+             "horn": horn, "materials": materials, "monsters": monsters, "locations": locations,
+             "quests": quests, "items": ref_item_recs}
     return files, torso_id
 
 
@@ -219,7 +290,7 @@ def check_integrity(files):
     for name, lst in files.items():
         if name == "horn":
             continue
-        seen = [x["id"] for x in lst]
+        seen = [(x["kind"], x["id"]) if name == "quests" else x["id"] for x in lst]
         if len(seen) != len(set(seen)):
             errs.append(f"{name}: duplicate ids")
     for t in files["skills"]:
@@ -241,7 +312,30 @@ def check_integrity(files):
     for w in files["weapons"]:
         if w["parentId"] is not None and w["parentId"] not in wids:
             errs.append(f"weapon {w['id']}: unknown parentId {w['parentId']}")
+    quest_ids = {x["id"] for x in files["quests"] if x["kind"] == "quest"}
+    arena_ids = {x["id"] for x in files["quests"] if x["kind"] == "arena"}
+    item_ids = ids("items") | mats
     for m in files["materials"]:
+        s = m["sources"]
+        for x in s["quests"]:
+            if x["questId"] not in quest_ids:
+                errs.append(f"material {m['id']}: unknown quest {x['questId']}")
+        for x in s["arena"]:
+            if x["arenaQuestId"] not in arena_ids:
+                errs.append(f"material {m['id']}: unknown arena quest {x['arenaQuestId']}")
+        for x in s["combining"]:
+            for k in ("item1Id", "item2Id"):
+                if x[k] not in item_ids:
+                    errs.append(f"material {m['id']}: unknown combining item {x[k]}")
+        for x in s["veggieElder"]:
+            if x["offerItemId"] not in item_ids:
+                errs.append(f"material {m['id']}: unknown veggie item {x['offerItemId']}")
+        for x in s["wyporium"]:
+            for k in ("itemInId", "itemOutId"):
+                if x[k] not in item_ids:
+                    errs.append(f"material {m['id']}: unknown wyporium item {x[k]}")
+            if x["unlockQuestId"] is not None and x["unlockQuestId"] not in quest_ids:
+                errs.append(f"material {m['id']}: unknown wyporium unlock quest {x['unlockQuestId']}")
         for d in m["drops"]:
             if d["monsterId"] not in mons:
                 errs.append(f"material {m['id']}: unknown monster {d['monsterId']}")
@@ -281,7 +375,8 @@ def convert(db_path, out_dir, source_url, source_commit, warn=None):
     out.mkdir(parents=True, exist_ok=True)
     for name, data in {**files, "meta": meta}.items():
         (out / f"{name}.json").write_bytes(dumps(data).encode("utf-8"))
-    no_src = sorted({m["id"] for m in files["materials"] if not m["drops"] and not m["gathering"]})
+    no_src = sorted({m["id"] for m in files["materials"]
+                     if not m["drops"] and not m["gathering"] and not any(m["sources"].values())})
     return counts, warnings, no_src
 
 
@@ -301,7 +396,7 @@ def main(argv=None):
     for k, v in sorted(counts.items()):
         print(f"{k}: {v}")
     print(f"warnings: {len(warnings)}")
-    print(f"materials with no drop and no gathering source: {len(no_src)}")
+    print(f"materials with no source of any kind: {len(no_src)}")
     return 0
 
 
