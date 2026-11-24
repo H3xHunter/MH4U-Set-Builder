@@ -114,12 +114,13 @@ const ALL_TARGETS: Target[] = [
 ]
 
 /**
- * Drops decorations that no longer fit any container: the longest prefix that fits is kept,
+ * Unequips a charm that is no longer in the list, and drops decorations that no longer fit any container: the longest prefix that fits is kept,
  * the rest is dropped from the end. Returns the same object when nothing changes, so the UI
  * can also call it when the saved charm list changes.
  */
 export function normalizeBuild(s: BuildState, ctx: BuildContext): BuildState {
-  let out = s
+  // A deleted charm is unequipped (its decorations go with it).
+  let out = s.charm.charmId !== null && !resolveCharm(s, ctx) ? { ...s, charm: { charmId: null, decos: [] } } : s
   for (const t of ALL_TARGETS) {
     const decos = decosOf(out, t)
     const capacity = capacityOf(out, t, ctx)

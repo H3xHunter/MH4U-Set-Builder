@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DecorationPicker, type DecoTarget } from '@/components/pickers/DecorationPicker'
+import { CharmPicker } from '@/components/pickers/CharmPicker'
 import { ArmorPicker } from '@/components/pickers/ArmorPicker'
 import { WeaponPicker } from '@/components/pickers/WeaponPicker'
 import type { ArmorSlot, GameData } from '@/data/types'
@@ -14,8 +15,8 @@ import { SkillsPanel } from './SkillsPanel'
 import { StatsPanels } from './StatsPanels'
 
 // Mobile shows one tab at a time; from lg up every tab is shown as a column.
-type CardKey = ArmorSlot | 'weapon'
-const targetOf = (key: CardKey): Target => (key === 'weapon' ? { kind: 'weapon' } : { kind: 'armor', slot: key })
+type CardKey = ArmorSlot | 'weapon' | 'charm'
+const targetOf = (key: CardKey): Target => (key === 'weapon' || key === 'charm' ? { kind: key } : { kind: 'armor', slot: key })
 
 const tabContent = 'min-w-0 data-[state=inactive]:hidden lg:data-[state=inactive]:block'
 
@@ -25,6 +26,7 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
   const [decoPick, setDecoPick] = useState<{ key: CardKey; target: DecoTarget; open: boolean } | null>(null)
   // `session` is the React key: every open mounts a fresh picker that starts from the current weapon.
   const [weaponPick, setWeaponPick] = useState({ open: false, session: 0 })
+  const [charmPick, setCharmPick] = useState({ open: false, session: 0 })
   const treeName = (id: number | string) => b.treeNames.get(Number(id)) ?? `#${id}`
 
   const openDecoPicker = (key: CardKey) => {
@@ -34,11 +36,14 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
     const name =
       key === 'weapon'
         ? (resolveWeapon(b.build, b.ctx)?.name ?? 'Custom weapon')
-        : (findArmor(b.ctx, b.build.armor[key]?.armorId ?? -1)?.name ?? '')
+        : key === 'charm'
+          ? 'Charm'
+          : (findArmor(b.ctx, b.build.armor[key]?.armorId ?? -1)?.name ?? '')
     setDecoPick({ key, open: true, target: { name, used, capacity } })
   }
   const closeArmor = () => setArmorPick((p) => p && { ...p, open: false })
   const closeWeapon = () => setWeaponPick((p) => ({ ...p, open: false }))
+  const closeCharm = () => setCharmPick((p) => ({ ...p, open: false }))
   const closeDeco = () => setDecoPick((p) => p && { ...p, open: false })
 
   return (
@@ -66,6 +71,7 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
                 onPick={(slot) => setArmorPick({ slot, open: true })}
                 onAddDeco={openDecoPicker}
                 onPickWeapon={() => setWeaponPick((p) => ({ open: true, session: p.session + 1 }))}
+                onPickCharm={() => setCharmPick((p) => ({ open: true, session: p.session + 1 }))}
               />
             </Rise>
           </TabsContent>
@@ -92,6 +98,21 @@ export function Builder({ data, style, onStyle }: { data: GameData; style: PlayS
         fits={(id) => !!decoPick && b.canAddDeco(targetOf(decoPick.key), id)}
         treeName={treeName}
         onPick={(id) => decoPick && b.addDeco(targetOf(decoPick.key), id)}
+      />
+      <CharmPicker
+        key={`charm-${charmPick.session}`}
+        open={charmPick.open}
+        onClose={closeCharm}
+        data={data}
+        charms={b.ctx.charms}
+        equippedId={b.build.charm.charmId}
+        treeName={treeName}
+        storageError={b.storageError}
+        issueCount={b.charmIssues.filter((i) => i.index !== undefined).length}
+        onEquip={b.equipCharm}
+        onSave={b.saveCharm}
+        onDelete={b.removeCharm}
+        onCopy={b.copyCharm}
       />
       <WeaponPicker
         key={weaponPick.session}

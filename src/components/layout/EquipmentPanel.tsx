@@ -1,9 +1,10 @@
 import { EquipmentCard } from '@/components/equipment/EquipmentCard'
+import { CharmCard } from '@/components/equipment/CharmCard'
 import { WeaponCard } from '@/components/equipment/WeaponCard'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ARMOR_SLOTS, type ArmorSlot } from '@/data/types'
-import { capacityOf, decosOf, findArmor, findDeco, resolveWeapon } from '@/state/build'
+import { capacityOf, decosOf, findArmor, findDeco, resolveCharm, resolveWeapon } from '@/state/build'
 import type { useBuild } from '@/state/useBuild'
 import { MobileSummary } from './MobileSummary'
 import { Section, displayHeading } from './Section'
@@ -16,14 +17,18 @@ export function EquipmentPanel({
   onPick,
   onAddDeco,
   onPickWeapon,
+  onPickCharm,
 }: {
   b: ReturnType<typeof useBuild>
   onPick: (slot: ArmorSlot) => void
-  onAddDeco: (key: ArmorSlot | 'weapon') => void
+  onAddDeco: (key: ArmorSlot | 'weapon' | 'charm') => void
   onPickWeapon: () => void
+  onPickCharm: () => void
 }) {
   const treeName = (id: number | string) => b.treeNames.get(Number(id)) ?? `#${id}`
-  const charmEmpty = { armor: null, decos: [], capacity: 0, treeName, disabled: true, onChange: noop, onRemove: noop, onAddDeco: noop, onRemoveDeco: noop }
+  const charmEmpty = { armor: null, decos: [], capacity: 0, treeName, onChange: onPickCharm, onRemove: noop, onAddDeco: noop, onRemoveDeco: noop }
+  const charmTarget = { kind: 'charm' } as const
+  const charm = resolveCharm(b.build, b.ctx)
   const weaponTarget = { kind: 'weapon' } as const
   const weaponSel = b.build.weapon
   const weaponData = resolveWeapon(b.build, b.ctx)
@@ -98,7 +103,20 @@ export function EquipmentPanel({
             />
           )
         })}
-        <EquipmentCard label="Charm" slot="charm" {...charmEmpty} />
+        {charm ? (
+          <CharmCard
+            charm={charm}
+            decos={decosOf(b.build, charmTarget).flatMap((id) => findDeco(b.ctx, id) ?? [])}
+            capacity={capacityOf(b.build, charmTarget, b.ctx)}
+            treeName={treeName}
+            onChange={onPickCharm}
+            onRemove={() => b.equipCharm(null)}
+            onAddDeco={() => onAddDeco('charm')}
+            onRemoveDeco={(i) => b.removeDeco(charmTarget, i)}
+          />
+        ) : (
+          <EquipmentCard label="Charm" slot="charm" {...charmEmpty} />
+        )}
       </ul>
     </Section>
   )

@@ -36,8 +36,8 @@ export const RESISTANCE_TREES: Readonly<Record<Element, { id: number; name: stri
 }
 
 /**
- * Element Res skills: the active TIER gives the resistance, not the skill points
- * (threshold -> resistance). NEEDS AN IN-GAME CHECK: Hex is "pretty sure" about these values.
+ * Element Res skills: the active TIER gives the resistance, not the skill points (threshold -> resistance).
+ * Points past a skill's top tier add nothing: a skill has a ceiling, so extra points are wasted.
  */
 export const RESISTANCE_BY_THRESHOLD: Readonly<Record<number, number>> = {
   10: 15,

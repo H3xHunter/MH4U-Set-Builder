@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { SavedCharm } from '@/data/types'
 import { mkData } from '@/state/fixtures'
 import {
+  addCharm,
+  duplicateCharm,
+  MAX_CHARMS,
   CHARMS_BACKUP_KEY,
   CHARMS_KEY,
   createCharm,
@@ -64,7 +67,7 @@ describe('loadCharms', () => {
   })
 
   it('keeps valid entries, drops invalid ones with issues, writes the backup', () => {
-    const raw = wrap([good('a'), { id: 'b', name: '', slots: 1, skills: {} }, 'junk', good('c')])
+    const raw = wrap([good('a'), { id: 'b', name: 'x'.repeat(41), slots: 1, skills: { '1': 21 } }, 'junk', good('c')])
     const st = memory({ [CHARMS_KEY]: raw })
     const r = loadCharms(data, st)
     expect(r.charms.map((c) => c.id)).toEqual(['a', 'c'])
@@ -85,13 +88,13 @@ describe('loadCharms', () => {
     expect(r.issues[0]).toMatchObject({ index: 1 })
   })
 
-  it('keeps at most 200 charms', () => {
-    const list = Array.from({ length: 201 }, (_, i) => good(`c${i}`))
+  it('keeps at most 100 charms', () => {
+    const list = Array.from({ length: 101 }, (_, i) => good(`c${i}`))
     const st = memory({ [CHARMS_KEY]: wrap(list) })
     const r = loadCharms(data, st)
-    expect(r.charms).toHaveLength(200)
-    expect(r.charms[199].id).toBe('c199')
-    expect(r.issues[0]).toMatchObject({ index: 200 })
+    expect(r.charms).toHaveLength(100)
+    expect(r.charms[99].id).toBe('c99')
+    expect(r.issues[0]).toMatchObject({ index: 100 })
     expect(st.m.has(CHARMS_BACKUP_KEY)).toBe(true)
   })
 
@@ -134,11 +137,12 @@ describe('saveCharms', () => {
 
 describe('validateCharmInput', () => {
   const ok = { id: 'a', name: 'x', slots: 1, skills: {} }
-  it('trims names and enforces 1 to 40 characters', () => {
+  it('trims names, allows no name, and caps the length at 40', () => {
     expect(validateCharmInput(data, { ...ok, name: '  Hi  ' })).toMatchObject({ ok: true, charm: { name: 'Hi' } })
     expect(validateCharmInput(data, { ...ok, name: 'x'.repeat(40) }).ok).toBe(true)
     expect(validateCharmInput(data, { ...ok, name: 'x'.repeat(41) }).ok).toBe(false)
-    expect(validateCharmInput(data, { ...ok, name: '   ' }).ok).toBe(false)
+    expect(validateCharmInput(data, { ...ok, name: '   ' })).toMatchObject({ ok: true, charm: { name: '' } })
+    expect(validateCharmInput(data, { ...ok, name: '' }).ok).toBe(true)
     expect(validateCharmInput(data, { ...ok, name: 5 }).ok).toBe(false)
   })
   it('a slot-only charm is valid; neither slots nor skills is not', () => {
@@ -151,7 +155,8 @@ describe('validateCharmInput', () => {
     ['non-integer slots', { slots: 1.5 }],
     ['zero points', { skills: { '1': 0 } }],
     ['fractional points', { skills: { '1': 1.5 } }],
-    ['points over 99', { skills: { '1': 100 } }],
+    ['points over 20', { skills: { '1': 21 } }],
+    ['points under -20', { skills: { '1': -21 } }],
     ['string points', { skills: { '1': '2' } }],
     ['more than 8 skills', { skills: Object.fromEntries(Array.from({ length: 9 }, (_, i) => [String(i + 1), 1])) }],
     ['Torso Up tree', { skills: { '9': 1 } }],
@@ -189,7 +194,37 @@ describe('helpers and round trip', () => {
     expect(upd.charms).toHaveLength(1)
   })
   it('createCharm returns errors and generates a valid default id', () => {
-    expect(createCharm(data, { name: '', slots: 1, skills: {} }, () => 'x').ok).toBe(false)
+    expect(createCharm(data, { name: '', slots: 0, skills: {} }, () => 'x').ok).toBe(false)
     expect(createCharm(data, { name: 'n', slots: 1, skills: {} }).ok).toBe(true)
+  })
+})
+
+describe('limits and list operations', () => {
+  it('accepts points at the limit (-20 and +20) and rejects duplicate tree keys via the object shape', () => {
+    expect(validateCharmInput(data, { id: 'a', name: '', slots: 0, skills: { '1': 20, '2': -20 } }).ok).toBe(true)
+  })
+  it('wrong dataVersion and malformed JSON are rejected with a backup (see loadCharms cases above)', () => {
+    const st = memory({ [CHARMS_KEY]: wrap([good('a')], { dataVersion: 2 }) })
+    expect(loadCharms(data, st).charms).toEqual([])
+    expect(st.m.has(CHARMS_BACKUP_KEY)).toBe(true)
+  })
+  it('addCharm appends, validates and refuses past the cap', () => {
+    const r = addCharm(data, [good('a')], { name: 'n', slots: 1, skills: {} }, () => 'b')
+    expect(r.ok && r.charms.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(addCharm(data, [good('a')], { name: '', slots: 0, skills: {} }).ok).toBe(false)
+    const full = Array.from({ length: MAX_CHARMS }, (_, i) => good(`c${i}`))
+    expect(addCharm(data, full, { name: 'n', slots: 1, skills: {} })).toMatchObject({ ok: false, errors: [expect.stringContaining('full')] })
+  })
+  it('duplicateCharm copies after the original with a new id, " (copy)" and the cap', () => {
+    const list = [good('a', { name: 'Atk' }), good('b', { name: '' })]
+    const r = duplicateCharm(data, list, 'a', () => 'a2')
+    expect(r.ok && r.charms.map((c) => [c.id, c.name])).toEqual([['a', 'Atk'], ['a2', 'Atk (copy)'], ['b', '']])
+    const long = duplicateCharm(data, [good('a', { name: 'x'.repeat(40) })], 'a', () => 'a2')
+    expect(long.ok && long.charms[1].name).toHaveLength(40)
+    const unnamed = duplicateCharm(data, list, 'b', () => 'b2')
+    expect(unnamed.ok && unnamed.charms[2].name).toBe('')
+    expect(duplicateCharm(data, list, 'zz').ok).toBe(false)
+    const full = Array.from({ length: MAX_CHARMS }, (_, i) => good(`c${i}`))
+    expect(duplicateCharm(data, full, 'c0').ok).toBe(false)
   })
 })

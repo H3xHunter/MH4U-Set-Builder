@@ -4,12 +4,13 @@ export const CHARMS_KEY = 'mh4u-set-builder:charms'
 export const CHARMS_BACKUP_KEY = 'mh4u-set-builder:charms:backup'
 export const STORAGE_VERSION = 1
 export const MAX_RAW_BYTES = 200 * 1024
-export const MAX_CHARMS = 200
+export const MAX_CHARMS = 100
 
-// Technical sanity bounds only, NOT game rules. The maximum number of skills per charm
-// and the maximum points per skill are unverified game rules and intentionally not enforced.
+// Sanity bounds, NOT confirmed game rules. CHARM_POINTS_LIMIT is the owner's guess at a sane limit for the points
+// of one skill on a charm; the real maximum is unverified. Storage tolerates up to 8 skills per charm, the editor makes 2.
+export const CHARM_POINTS_LIMIT = 20
 const MAX_SKILL_ENTRIES = 8
-const MAX_ABS_POINTS = 99
+export const CHARM_NAME_MAX = 40
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
 
@@ -49,9 +50,10 @@ export function validateCharmInput(data: GameData, input: unknown): CharmResult 
   if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
     errors.push('id must be 1 to 64 characters of A-Z, a-z, 0-9, _ or -')
   }
+  // The name is optional: '' means unnamed (the UI shows a generated summary instead).
   const trimmed = typeof name === 'string' ? name.trim() : ''
-  if (typeof name !== 'string' || trimmed.length < 1 || trimmed.length > 40) {
-    errors.push('name must be 1 to 40 characters after trimming')
+  if (typeof name !== 'string' || trimmed.length > CHARM_NAME_MAX) {
+    errors.push(`name must be text of at most ${CHARM_NAME_MAX} characters after trimming`)
   }
   if (!Number.isInteger(slots) || (slots as number) < 0 || (slots as number) > 3) {
     errors.push('slots must be an integer from 0 to 3')
@@ -68,8 +70,8 @@ export function validateCharmInput(data: GameData, input: unknown): CharmResult 
       const v = skills[k]
       if (k === String(data.meta.torsoUpTreeId)) errors.push(`skills.${k}: the Torso Up tree cannot be on a charm`)
       else if (!known.has(k)) errors.push(`skills.${k}: unknown skill tree`)
-      else if (!Number.isInteger(v) || v === 0 || Math.abs(v as number) > MAX_ABS_POINTS) {
-        errors.push(`skills.${k}: points must be a nonzero integer with absolute value at most ${MAX_ABS_POINTS}`)
+      else if (!Number.isInteger(v) || v === 0 || Math.abs(v as number) > CHARM_POINTS_LIMIT) {
+        errors.push(`skills.${k}: points must be a nonzero integer with absolute value at most ${CHARM_POINTS_LIMIT}`)
       } else points[k] = v as number
     }
   }
@@ -174,3 +176,35 @@ export function updateCharm(
 
 export const deleteCharm = (charms: readonly SavedCharm[], id: string): SavedCharm[] =>
   charms.filter((c) => c.id !== id)
+
+const listFull = (): CharmListResult => ({ ok: false, errors: [`the charm list is full (${MAX_CHARMS} charms)`] })
+
+/** Appends a new charm; refuses past MAX_CHARMS. */
+export function addCharm(
+  data: GameData,
+  charms: readonly SavedCharm[],
+  input: CharmInput,
+  makeId?: () => string,
+): CharmListResult {
+  if (charms.length >= MAX_CHARMS) return listFull()
+  const r = createCharm(data, input, makeId)
+  return r.ok ? { ok: true, charms: [...charms, r.charm] } : r
+}
+
+/** Inserts a copy right after the original. A named charm gets " (copy)" (cut to fit the name limit). */
+export function duplicateCharm(
+  data: GameData,
+  charms: readonly SavedCharm[],
+  id: string,
+  makeId?: () => string,
+): CharmListResult {
+  const at = charms.findIndex((c) => c.id === id)
+  if (at < 0) return { ok: false, errors: [`no charm with id ${id}`] }
+  if (charms.length >= MAX_CHARMS) return listFull()
+  const { name, slots, skills } = charms[at]
+  const suffix = ' (copy)'
+  const copyName = name ? name.slice(0, CHARM_NAME_MAX - suffix.length).trimEnd() + suffix : ''
+  const r = createCharm(data, { name: copyName, slots, skills: { ...skills } }, makeId)
+  if (!r.ok) return r
+  return { ok: true, charms: [...charms.slice(0, at + 1), r.charm, ...charms.slice(at + 1)] }
+}

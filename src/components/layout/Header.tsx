@@ -1,5 +1,4 @@
-import { Gem, Swords } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Swords } from 'lucide-react'
 import { PLAY_STYLES, Segmented, type PlayStyle } from './Segmented'
 
 export function Header({ style, onStyle }: { style: PlayStyle; onStyle: (s: PlayStyle) => void }) {
@@ -13,10 +12,6 @@ export function Header({ style, onStyle }: { style: PlayStyle; onStyle: (s: Play
           <div className="hidden lg:block">
             <Segmented value={style} onChange={onStyle} options={PLAY_STYLES} label="Hunter class" />
           </div>
-          <Button variant="outline" size="sm" disabled>
-            <Gem aria-hidden />
-            <span className="font-display text-sm font-semibold uppercase tracking-[0.08em]">Charms</span>
-          </Button>
         </div>
       </div>
     </header>

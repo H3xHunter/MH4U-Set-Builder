@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { SavedCharm } from '@/data/types'
 import { loadRealData } from '@/data/real-data-fixture'
 import { emptyBuild, type BuildContext } from './build'
 import { deriveBuild } from './derive'
@@ -45,5 +46,39 @@ describe('useBuild reducer and helpers', () => {
     s = reduce(s, { type: 'setWeapon', weapon: { kind: 'none' } })
     expect(s.weaponDecos).toEqual([])
     expect(s.armor.head?.armorId).toBe(head.id)
+  })
+
+  describe('charm list changes (the hook normalizes after each one)', () => {
+    const charm: SavedCharm = { id: 'c1', name: '', slots: 2, skills: { '118': 3 } }
+    const withCharm = (charms: BuildContext['charms']): BuildContext => ({ data, charms })
+    const deco1 = data.decorations.find((d) => d.size === 1)!
+    const equipped = () => {
+      const c = withCharm([charm])
+      let s = makeReducer(c)(emptyBuild(), { type: 'setCharm', charmId: 'c1' })
+      s = makeReducer(c)(s, { type: 'addDeco', target: { kind: 'charm' }, decoId: deco1.id })
+      s = makeReducer(c)(s, { type: 'addDeco', target: { kind: 'charm' }, decoId: deco1.id })
+      return s
+    }
+
+    it('deleting the equipped charm unequips it and drops its decorations', () => {
+      const s = equipped()
+      expect(s.charm).toEqual({ charmId: 'c1', decos: [deco1.id, deco1.id] })
+      const after = makeReducer(withCharm([]))(s, { type: 'normalize' })
+      expect(after.charm).toEqual({ charmId: null, decos: [] })
+      expect(deriveBuild(after, withCharm([])).skills).toEqual([])
+    })
+
+    it('deleting another charm changes nothing', () => {
+      const s = equipped()
+      expect(makeReducer(withCharm([charm, { ...charm, id: 'c2' }]))(s, { type: 'normalize' })).toBe(s)
+    })
+
+    it('editing the equipped charm updates the build; fewer slots drop the decorations that no longer fit', () => {
+      const s = equipped()
+      const edited = withCharm([{ ...charm, skills: { '118': 5 }, slots: 1 }])
+      const after = makeReducer(edited)(s, { type: 'normalize' })
+      expect(after.charm).toEqual({ charmId: 'c1', decos: [deco1.id] })
+      expect(deriveBuild(after, edited).skills.find((r) => r.treeId === 118)?.charm).toBe(5)
+    })
   })
 })
