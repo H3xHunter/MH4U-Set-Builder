@@ -68,32 +68,85 @@ describe('sourceView on real data', () => {
 
   it('(a) no source of any kind: Bumblepumpkin (201)', () => {
     expect(mat(201).name).toBe('Bumblepumpkin')
-    expect(sourceView(mat(201), real)).toMatchObject({ drops: [], gathering: [], quests: [], coverage: 'none', otherKinds: [] })
+    expect(sourceView(mat(201), real)).toMatchObject({ drops: [], gathering: [], quests: [], wyporium: [], arena: [], veggieElder: false, coverage: 'none', otherKinds: [] })
   })
 
-  it('(b) only sources v1 does not show: kinds named from the material own data', () => {
-    expect(mat(16).name).toBe('Demondrug')
-    const v = sourceView(mat(16), real)
+  it('(b) combining only: Gunpowder (32) says so and nothing else is shown', () => {
+    expect(mat(32).name).toBe('Gunpowder')
+    const v = sourceView(mat(32), real)
     expect(v.coverage).toBe('otherOnly')
-    expect([...v.drops, ...v.gathering, ...v.quests]).toEqual([])
-    expect(v.otherKinds).toEqual(['Combining', 'Veggie Elder'])
-    const arzuros = real.materials.find((m) => m.name === 'Arzuros Shell')
-    expect(arzuros).toBeDefined()
-    const a = sourceView(arzuros as Material, real)
-    expect(a.coverage).toBe('otherOnly')
-    expect(a.otherKinds).toEqual(['Wyporium trade'])
+    expect(v.otherKinds).toEqual(['Combining'])
+    expect([...v.drops, ...v.gathering, ...v.quests, ...v.wyporium, ...v.arena]).toEqual([])
+    expect(v.veggieElder).toBe(false)
   })
 
-  it('(c) shown sources: coverage "shown", other kinds are listed but not displayed', () => {
-    const v = sourceView(mat(205), real) // has a combining source
+  it('(c) shown sources: Machalite Ore keeps its drops and quests; Combining is named but not displayed', () => {
+    const v = sourceView(mat(205), real)
     expect(v.coverage).toBe('shown')
     expect(v.otherKinds).toEqual(['Combining'])
   })
 
-  it('counts over the data: 54 with no source, 145 with only hidden kinds, 897 with shown sources', () => {
+  it('Wyporium: Arzuros Shell (1094) is received by handing in G.Jaggi Claw, unlocked by "Swing into Action"', () => {
+    const v = sourceView(mat(1094), real)
+    expect(v.wyporium).toEqual([{ handInItemId: 390, handInName: 'G.Jaggi Claw', unlockQuest: { name: 'Swing into Action', hub: 'Caravan', stars: 3 } }])
+    expect(v.coverage).toBe('shown')
+    expect(v.issues).toEqual([])
+  })
+
+  it('Wyporium: Nargacuga Cutwing+ (1184) is in two trades, sorted by hand-in name', () => {
+    const v = sourceView(mat(1184), real)
+    expect(v.wyporium.map((w) => [w.handInItemId, w.handInName, w.unlockQuest?.name, w.unlockQuest?.hub, w.unlockQuest?.stars])).toEqual([
+      [744, 'Zinogre Claw', 'Uncorner the Market', 'Caravan', 5],
+      [746, 'Zinogre Hardclaw', 'Advanced: Bolt of Pink', 'Guild', 9],
+    ])
+  })
+
+  it('Wyporium: a material that is only the hand-in side gets no Wyporium rows (G.Jaggi Claw 390)', () => {
+    expect(mat(390).sources.wyporium).toHaveLength(1) // it is in a trade...
+    const v = sourceView(mat(390), real)
+    expect(v.wyporium).toEqual([]) // ...but only as the item handed in
+    expect(v.drops.length + v.quests.length).toBeGreaterThan(0)
+  })
+
+  it('every trade: exactly one received side and one hand-in side; received materials get one row per trade', () => {
+    let rows = 0
+    for (const m of real.materials) rows += sourceView(m, real).wyporium.length
+    expect(rows).toBe(128) // all 128 trades, seen from the received side
+  })
+
+  it('Arena: Pinnacle Coin (1323) lists its arena quests in a separate id space', () => {
+    const v = sourceView(mat(1323), real)
+    expect(v.arena).toHaveLength(3)
+    expect(v.arena.map((r) => r.questName)).toEqual(expect.arrayContaining(['Grudge Match: Yian Kut-Ku', 'Grudge Match: Kecha Wacha']))
+    expect(v.arena.every((r) => r.percentage > 0 && r.stackSize >= 1)).toBe(true)
+    // arena ids 1..16 overlap quest ids: the names above come from kind 'arena', not 'quest'
+    expect(v.issues).toEqual([])
+    const p = v.arena.map((r) => r.percentage)
+    expect(p).toEqual([...p].sort((a, b) => b - a))
+  })
+
+  it('Veggie Elder: Demondrug (16) is a plain flag; its only other kind is Combining', () => {
+    const v = sourceView(mat(16), real)
+    expect(v.veggieElder).toBe(true)
+    expect(v.coverage).toBe('shown')
+    expect(v.otherKinds).toEqual(['Combining'])
+    expect(sourceView(mat(201), real).veggieElder).toBe(false)
+  })
+
+  it('all 118 materials whose only extra source was the Wyporium now report coverage "shown"', () => {
+    const only = real.materials.filter(
+      (m) =>
+        m.sources.wyporium.length > 0 &&
+        m.drops.length + m.gathering.length + m.sources.quests.length + m.sources.arena.length + m.sources.combining.length + m.sources.veggieElder.length === 0,
+    )
+    expect(only).toHaveLength(118)
+    expect(only.every((m) => sourceView(m, real).coverage === 'shown')).toBe(true)
+  })
+
+  it('counts over the data: 54 with no source, 1 combining only, 1041 shown', () => {
     const c = { none: 0, otherOnly: 0, shown: 0 }
     for (const m of real.materials) c[sourceView(m, real).coverage]++
-    expect(c).toEqual({ none: 54, otherOnly: 145, shown: 897 })
+    expect(c).toEqual({ none: 54, otherOnly: 1, shown: 1041 })
   })
 
   it('a null-percentage drop shows "?" and sorts last; a 0-percentage drop shows "0%"', () => {
@@ -183,16 +236,47 @@ describe('sourceView fixtures', () => {
     expect(rows.sort(byChance((r) => r.n)).map((r) => `${r.percentage}${r.n}`)).toEqual(['20z', '10a', '10b', 'nulla'])
   })
 
-  it('(b) in a fixture: kinds in plain words, in a fixed order', () => {
+  it('fixture: arena, wyporium (received side only), veggie elder and combining; unknown ids fall back and are listed', () => {
+    const d = data({
+      quests: [
+        { id: 7, kind: 'quest', name: 'Real Quest', hub: 'Guild', type: 'Normal', stars: 6 },
+        { id: 7, kind: 'arena', name: 'Arena Seven', hub: null, type: null, stars: null },
+      ],
+      items: [{ id: 50, name: 'Hand In Item', type: 't', rarity: 1 }],
+    })
     const m = material({
+      id: 10,
       sources: {
         quests: [],
-        arena: [{ arenaQuestId: 1, percentage: 1, stackSize: 1 }],
+        arena: [{ arenaQuestId: 7, percentage: 20, stackSize: 2 }, { arenaQuestId: 99, percentage: 5, stackSize: 1 }],
         combining: [{ item1Id: 1, item2Id: 2, amountMin: 1, amountMax: 1, percentage: 1 }],
         veggieElder: [{ offerItemId: 1, quantity: 1 }],
-        wyporium: [{ itemInId: 1, itemOutId: 2, unlockQuestId: null }],
+        wyporium: [
+          { itemInId: 10, itemOutId: 50, unlockQuestId: 7 }, // received: a row
+          { itemInId: 11, itemOutId: 10, unlockQuestId: 7 }, // handed in: no row
+          { itemInId: 10, itemOutId: 51, unlockQuestId: null }, // unknown hand-in item, no unlock quest
+          { itemInId: 10, itemOutId: 50, unlockQuestId: 8 }, // unknown unlock quest
+        ],
       },
     })
-    expect(sourceView(m, data())).toMatchObject({ coverage: 'otherOnly', otherKinds: ['Wyporium trade', 'Arena', 'Combining', 'Veggie Elder'] })
+    const v = sourceView(m, d)
+    expect(v.arena.map((r) => [r.questName, r.percentage, r.stackSize])).toEqual([['Arena Seven', 20, 2], ['Arena quest #99', 5, 1]])
+    expect(v.wyporium).toEqual([
+      { handInItemId: 50, handInName: 'Hand In Item', unlockQuest: { name: 'Real Quest', hub: 'Guild', stars: 6 } },
+      { handInItemId: 50, handInName: 'Hand In Item', unlockQuest: { name: 'Quest #8', hub: null, stars: null } },
+      { handInItemId: 51, handInName: 'Item #51', unlockQuest: null },
+    ])
+    expect(v.veggieElder).toBe(true)
+    expect(v.coverage).toBe('shown')
+    expect(v.otherKinds).toEqual(['Combining'])
+    expect(v.issues).toEqual([{ kind: 'unknownArenaQuest', id: 99 }, { kind: 'unknownItem', id: 51 }, { kind: 'unknownQuest', id: 8 }])
+  })
+
+  it('fixture: a material that is only the hand-in side and has nothing else is "none"', () => {
+    const m = material({
+      id: 10,
+      sources: { quests: [], arena: [], combining: [], veggieElder: [], wyporium: [{ itemInId: 11, itemOutId: 10, unlockQuestId: null }] },
+    })
+    expect(sourceView(m, data())).toMatchObject({ wyporium: [], coverage: 'none' })
   })
 })

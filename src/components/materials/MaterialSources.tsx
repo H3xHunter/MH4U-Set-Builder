@@ -46,6 +46,10 @@ function Group<T>({ title, rows, render }: { title: string; rows: T[]; render: (
   )
 }
 
+/** "Caravan 3★" / "Guild" / "" from what the data has. */
+const unlockDetail = (q: { hub: string | null; stars: number | null }) =>
+  [q.hub, q.stars === null ? null : `${q.stars}★`].filter((x) => x !== null).join(' ')
+
 const Times = ({ n }: { n: number }) =>
   n > 1 ? (
     <span className="ml-1 font-mono text-xs text-muted-foreground" title={`${n} identical rows in the data`}>
@@ -131,6 +135,41 @@ export function MaterialSources({ material, data }: { material: Material; data: 
           </>
         )}
       />
+      <Group
+        title="Wyporium trade"
+        rows={v.wyporium}
+        render={(w) => (
+          <>
+            Hand in {w.handInName}
+            {w.unlockQuest !== null && (
+              <>
+                <Dot />
+                Unlocked by {w.unlockQuest.name}
+                {unlockDetail(w.unlockQuest) !== '' && ` (${unlockDetail(w.unlockQuest)})`}
+              </>
+            )}
+          </>
+        )}
+      />
+      <Group
+        title="Arena"
+        rows={v.arena}
+        render={(r) => (
+          <>
+            {r.questName}
+            <Dot />
+            <span className="font-mono">{formatChance(r.percentage)}</span>
+            {r.stackSize > 1 && <span className="font-mono text-xs text-muted-foreground"> qty {r.stackSize}</span>}
+            <Times n={r.count} />
+          </>
+        )}
+      />
+      {v.veggieElder && (
+        <div>
+          <h4 className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">Veggie Elder</h4>
+          <p className="text-sm leading-snug">Given by the Veggie Elder.</p>
+        </div>
+      )}
     </div>
   )
 }

@@ -120,10 +120,15 @@ Only items used as armor or weapon recipe materials (every non-weapon item refer
   - `combining`: `[{item1Id, item2Id, amountMin, amountMax, percentage}]` where this material is the created item.
     Ingredient ids refer to `items.json` or `materials.json`.
   - `veggieElder`: `[{offerItemId, quantity}]` where this material is the received item (`receive_item_id`).
-  - `wyporium`: `[{itemInId, itemOutId, unlockQuestId}]` for rows where this material is on either side. The names
-    are the source column names (`item_in_id`, `item_out_id`). **Which side the player gives and which they receive
-    is unverified; do not label it in the UI.** A row whose both sides are materials appears under both. `unlockQuestId`
-    refers to `quests.json` (kind `quest`) or is null.
+  - `wyporium`: `[{itemInId, itemOutId, unlockQuestId}]` for rows where this material is on either side (so a
+    trade appears under both of its materials). **Direction (confirmed):** `itemInId` is the item the player
+    RECEIVES and `itemOutId` the item the player HANDS IN. `unlockQuestId` is the quest the player clears to unlock the
+    trade; it refers to `quests.json` (kind `quest`) or is null. How this was confirmed: the data pattern (in 119 of
+    128 trades the `item_in_id` side has no source outside the Wyporium, the same column in all 119, 0 exceptions; the
+    id ranges of the two columns never overlap; the 9 trades where both sides have other sources use the same
+    column) plus Hex's in-game check of trade 1 (hand in G.Jaggi Claw, receive Arzuros Shell). It is applied to all
+    128 trades. **Quantities are not in the data**; nothing may claim 1:1 or any amount. A material is a Wyporium
+    source only for the trades where it is `itemInId`.
 - An item can still have no link at all (the converter reports how many).
 - An item that is a recipe material is only in `materials.json`, never also in `items.json`.
 

@@ -2,8 +2,11 @@ import type { GameData, Material, Rank } from '@/data/types'
 
 /*
  * Where a material comes from, as plain rows for the UI. Pure; no React.
- * Shown: monster drops, gathering, quest rewards. NOT shown (v1): combining, arena, wyporium, veggie elder;
- * only their kinds are named (`otherKinds`).
+ * Shown: monster drops, gathering, quest rewards, Wyporium trades, arena quests, and a plain Veggie Elder flag.
+ * NOT shown: combining (only named in `otherKinds`).
+ * Wyporium direction (confirmed by Hex in game, and by the data: see docs/data-format.md): in the source table
+ * `item_in_id` is the item the player RECEIVES and `item_out_id` the item they HAND IN. A material gets a Wyporium
+ * row only when it is the received side. The data holds no quantities, so none is claimed.
  * Exact duplicate rows (all fields equal) are collapsed into one row with `count`; nothing is summed or dropped.
  * Order inside drops and gathering: rank G, HR, LR; then chance descending (null last); then name. Quest rewards have
  * no rank: chance descending (null last), then name. It is plain ordering, not a ranking of sources.
@@ -38,21 +41,42 @@ export interface QuestRow {
   count: number
 }
 
+/** An arena quest that gives the material (arena quests have no hub, stars or reward slot in the data). */
+export interface ArenaRow {
+  questName: string
+  percentage: number
+  stackSize: number
+  count: number
+}
+/** A trade in which the player hands in `handInName` and receives the material. */
+export interface WyporiumRow {
+  handInItemId: number
+  handInName: string
+  unlockQuest: { name: string; hub: string | null; stars: number | null } | null
+}
+
 export type SourceIssue =
   | { kind: 'unknownMonster'; id: number }
   | { kind: 'unknownLocation'; id: number }
   | { kind: 'unknownQuest'; id: number }
+  | { kind: 'unknownArenaQuest'; id: number }
+  | { kind: 'unknownItem'; id: number }
 
 export interface SourceView {
   drops: DropRow[]
   gathering: GatherRow[]
   quests: QuestRow[]
+  /** Only trades in which this material is the received item; sorted by hand-in name. */
+  wyporium: WyporiumRow[]
+  arena: ArenaRow[]
+  /** The Veggie Elder gives it; nothing more is shown. */
+  veggieElder: boolean
   /**
-   * 'none': no source of any kind. 'otherOnly': only sources v1 does not show (see `otherKinds`).
-   * 'shown': at least one drop, gathering or quest row.
+   * 'shown': any of drops, gathering, quest rewards, wyporium, arena or veggie elder.
+   * 'otherOnly': none of those, but a combining source. 'none': no source of any kind.
    */
   coverage: 'none' | 'otherOnly' | 'shown'
-  /** Plain-words kinds of the sources that are not shown, taken from the material's own data. */
+  /** Plain-words kinds of the sources that are not shown (only Combining). */
   otherKinds: string[]
   issues: SourceIssue[]
 }
@@ -61,6 +85,9 @@ interface Index {
   monsters: Map<number, string>
   locations: Map<number, string>
   quests: Map<number, { name: string; hub: string | null; stars: number | null }>
+  arena: Map<number, string>
+  /** Items and materials by id; a material wins over an item of the same id. */
+  names: Map<number, string>
 }
 const indexes = new WeakMap<GameData, Index>()
 function indexOf(data: GameData): Index {
@@ -71,6 +98,9 @@ function indexOf(data: GameData): Index {
       locations: new Map(data.locations.map((l) => [l.id, l.name])),
       // Quest rewards refer to kind 'quest' (arena quests have their own id space and are not shown).
       quests: new Map(data.quests.filter((q) => q.kind === 'quest').map((q) => [q.id, { name: q.name, hub: q.hub, stars: q.stars }])),
+      // Arena quests are a separate id space (kind 'arena'): ids overlap quest ids.
+      arena: new Map(data.quests.filter((q) => q.kind === 'arena').map((q) => [q.id, q.name])),
+      names: new Map([...data.items, ...data.materials].map((x) => [x.id, x.name])),
     }
     indexes.set(data, i)
   }
@@ -90,13 +120,6 @@ function collapse<T extends object>(rows: T[]): (T & { count: number })[] {
   }
   return [...out.values()]
 }
-
-const OTHER_KINDS = [
-  ['wyporium', 'Wyporium trade'],
-  ['arena', 'Arena'],
-  ['combining', 'Combining'],
-  ['veggieElder', 'Veggie Elder'],
-] as const
 
 /** Rank (G, HR, LR) when the rows have one, then chance descending (null last), then name. */
 export const byChance =
@@ -168,13 +191,42 @@ export function sourceView(material: Material, data: GameData): SourceView {
     }),
   ).sort(byChance((r) => r.questName))
 
-  const otherKinds = OTHER_KINDS.filter(([key]) => material.sources[key].length > 0).map(([, label]) => label)
+  const arena = collapse(
+    material.sources.arena.map((a) => {
+      const name = idx.arena.get(a.arenaQuestId)
+      if (name === undefined) flag({ kind: 'unknownArenaQuest', id: a.arenaQuestId })
+      return { questName: name ?? `Arena quest #${a.arenaQuestId}`, percentage: a.percentage, stackSize: a.stackSize }
+    }),
+  ).sort(byChance((r) => r.questName))
+
+  // Only the received side (itemInId) is a source of this material; the hand-in side is a use, not a source.
+  const wyporium: WyporiumRow[] = material.sources.wyporium
+    .filter((w) => w.itemInId === material.id)
+    .map((w) => {
+      const itemName = idx.names.get(w.itemOutId)
+      if (itemName === undefined) flag({ kind: 'unknownItem', id: w.itemOutId })
+      let unlockQuest: WyporiumRow['unlockQuest'] = null
+      if (w.unlockQuestId !== null) {
+        const q = idx.quests.get(w.unlockQuestId)
+        if (q === undefined) flag({ kind: 'unknownQuest', id: w.unlockQuestId })
+        unlockQuest = q ?? { name: `Quest #${w.unlockQuestId}`, hub: null, stars: null }
+      }
+      return { handInItemId: w.itemOutId, handInName: itemName ?? `Item #${w.itemOutId}`, unlockQuest }
+    })
+    .sort((a, b) => (a.handInName < b.handInName ? -1 : a.handInName > b.handInName ? 1 : a.handInItemId - b.handInItemId))
+
+  const veggieElder = material.sources.veggieElder.length > 0
+  const otherKinds = material.sources.combining.length > 0 ? ['Combining'] : []
+  const shown = drops.length + gathering.length + quests.length + wyporium.length + arena.length > 0 || veggieElder
 
   return {
     drops,
     gathering,
     quests,
-    coverage: material.drops.length + material.gathering.length + material.sources.quests.length > 0 ? 'shown' : otherKinds.length > 0 ? 'otherOnly' : 'none',
+    wyporium,
+    arena,
+    veggieElder,
+    coverage: shown ? 'shown' : otherKinds.length > 0 ? 'otherOnly' : 'none',
     otherKinds,
     issues,
   }
