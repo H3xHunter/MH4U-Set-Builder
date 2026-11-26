@@ -42,8 +42,7 @@ export function MaterialRow({
             {name}
           </span>
         </span>
-        <span aria-hidden="true" className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
-          <span>{total}</span>
+        <span aria-hidden="true" className="flex shrink-0 items-baseline justify-end gap-2 font-mono tabular-nums">
           {path > 0 && (
             <span className="text-xs text-muted-foreground">
               {base > 0 && `${base} + `}
@@ -53,6 +52,7 @@ export function MaterialRow({
               </span>
             </span>
           )}
+          <span data-slot="material-total">{total}</span>
         </span>
       </button>
       {open && (
