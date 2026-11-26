@@ -1,4 +1,5 @@
 import type { GameData, Material, Rank } from '@/data/types'
+import { itemName } from './materials'
 
 /*
  * Where a material comes from, as plain rows for the UI. Pure; no React.
@@ -55,13 +56,6 @@ export interface WyporiumRow {
   unlockQuest: { name: string; hub: string | null; stars: number | null } | null
 }
 
-export type SourceIssue =
-  | { kind: 'unknownMonster'; id: number }
-  | { kind: 'unknownLocation'; id: number }
-  | { kind: 'unknownQuest'; id: number }
-  | { kind: 'unknownArenaQuest'; id: number }
-  | { kind: 'unknownItem'; id: number }
-
 export interface SourceView {
   drops: DropRow[]
   gathering: GatherRow[]
@@ -78,7 +72,6 @@ export interface SourceView {
   coverage: 'none' | 'otherOnly' | 'shown'
   /** Plain-words kinds of the sources that are not shown (only Combining). */
   otherKinds: string[]
-  issues: SourceIssue[]
 }
 
 interface Index {
@@ -86,8 +79,6 @@ interface Index {
   locations: Map<number, string>
   quests: Map<number, { name: string; hub: string | null; stars: number | null }>
   arena: Map<number, string>
-  /** Items and materials by id; a material wins over an item of the same id. */
-  names: Map<number, string>
 }
 const indexes = new WeakMap<GameData, Index>()
 function indexOf(data: GameData): Index {
@@ -100,7 +91,6 @@ function indexOf(data: GameData): Index {
       quests: new Map(data.quests.filter((q) => q.kind === 'quest').map((q) => [q.id, { name: q.name, hub: q.hub, stars: q.stars }])),
       // Arena quests are a separate id space (kind 'arena'): ids overlap quest ids.
       arena: new Map(data.quests.filter((q) => q.kind === 'arena').map((q) => [q.id, q.name])),
-      names: new Map([...data.items, ...data.materials].map((x) => [x.id, x.name])),
     }
     indexes.set(data, i)
   }
@@ -137,22 +127,12 @@ export const byChance =
 
 export function sourceView(material: Material, data: GameData): SourceView {
   const idx = indexOf(data)
-  const issues: SourceIssue[] = []
-  const flagged = new Set<string>()
-  const flag = (issue: SourceIssue) => {
-    const key = `${issue.kind}:${issue.id}`
-    if (!flagged.has(key)) {
-      flagged.add(key)
-      issues.push(issue)
-    }
-  }
+  // Validation guarantees every id resolves; the fallback names only keep a bad file from crashing the panel.
 
   const drops = collapse(
     material.drops.map((d) => {
-      const name = idx.monsters.get(d.monsterId)
-      if (name === undefined) flag({ kind: 'unknownMonster', id: d.monsterId })
       return {
-        monsterName: name ?? `Monster #${d.monsterId}`,
+        monsterName: idx.monsters.get(d.monsterId) ?? `Monster #${d.monsterId}`,
         condition: d.condition,
         percentage: d.percentage,
         rank: d.rank,
@@ -163,10 +143,8 @@ export function sourceView(material: Material, data: GameData): SourceView {
 
   const gathering = collapse(
     material.gathering.map((g) => {
-      const name = idx.locations.get(g.locationId)
-      if (name === undefined) flag({ kind: 'unknownLocation', id: g.locationId })
       return {
-        locationName: name ?? `Location #${g.locationId}`,
+        locationName: idx.locations.get(g.locationId) ?? `Location #${g.locationId}`,
         area: g.area,
         site: g.site,
         rank: g.rank,
@@ -179,7 +157,6 @@ export function sourceView(material: Material, data: GameData): SourceView {
   const quests = collapse(
     material.sources.quests.map((q) => {
       const quest = idx.quests.get(q.questId)
-      if (quest === undefined) flag({ kind: 'unknownQuest', id: q.questId })
       return {
         questName: quest?.name ?? `Quest #${q.questId}`,
         hub: quest?.hub ?? null,
@@ -193,9 +170,7 @@ export function sourceView(material: Material, data: GameData): SourceView {
 
   const arena = collapse(
     material.sources.arena.map((a) => {
-      const name = idx.arena.get(a.arenaQuestId)
-      if (name === undefined) flag({ kind: 'unknownArenaQuest', id: a.arenaQuestId })
-      return { questName: name ?? `Arena quest #${a.arenaQuestId}`, percentage: a.percentage, stackSize: a.stackSize }
+      return { questName: idx.arena.get(a.arenaQuestId) ?? `Arena quest #${a.arenaQuestId}`, percentage: a.percentage, stackSize: a.stackSize }
     }),
   ).sort(byChance((r) => r.questName))
 
@@ -203,15 +178,9 @@ export function sourceView(material: Material, data: GameData): SourceView {
   const wyporium: WyporiumRow[] = material.sources.wyporium
     .filter((w) => w.itemInId === material.id)
     .map((w) => {
-      const itemName = idx.names.get(w.itemOutId)
-      if (itemName === undefined) flag({ kind: 'unknownItem', id: w.itemOutId })
-      let unlockQuest: WyporiumRow['unlockQuest'] = null
-      if (w.unlockQuestId !== null) {
-        const q = idx.quests.get(w.unlockQuestId)
-        if (q === undefined) flag({ kind: 'unknownQuest', id: w.unlockQuestId })
-        unlockQuest = q ?? { name: `Quest #${w.unlockQuestId}`, hub: null, stars: null }
-      }
-      return { handInItemId: w.itemOutId, handInName: itemName ?? `Item #${w.itemOutId}`, unlockQuest }
+      const q = w.unlockQuestId === null ? undefined : idx.quests.get(w.unlockQuestId)
+      const unlockQuest = w.unlockQuestId === null ? null : (q ?? { name: `Quest #${w.unlockQuestId}`, hub: null, stars: null })
+      return { handInItemId: w.itemOutId, handInName: itemName(data, w.itemOutId), unlockQuest }
     })
     .sort((a, b) => (a.handInName < b.handInName ? -1 : a.handInName > b.handInName ? 1 : a.handInItemId - b.handInItemId))
 
@@ -228,6 +197,5 @@ export function sourceView(material: Material, data: GameData): SourceView {
     veggieElder,
     coverage: shown ? 'shown' : otherKinds.length > 0 ? 'otherOnly' : 'none',
     otherKinds,
-    issues,
   }
 }

@@ -326,7 +326,8 @@ def build(conn, warn):
     for r in rows(conn, "select * from wyporium order by _id"):
         rec = {"itemInId": r["item_in_id"], "itemOutId": r["item_out_id"],
                "unlockQuestId": num(r["unlock_quest_id"], "wyporium.unlock_quest_id")}
-        # direction (which side the player gives) is unverified; keep column meaning only
+        # item_in_id is the item the player RECEIVES, item_out_id the one they HAND IN (confirmed by the data pattern and
+        # by Hex's in-game check of trade 1; see docs/data-format.md). Both sides are kept as stored.
         for i in {r["item_in_id"], r["item_out_id"]} & mat_set:
             add("wyporium", i, rec)
 

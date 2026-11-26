@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Section } from '@/components/layout/Section'
 import { Segmented } from '@/components/layout/Segmented'
-import { buildMaterials, effectiveMode, sortRows, totalIn, weaponsById, type MaterialIssue, type Route, type WeaponMode } from '@/lib/materials'
+import type { GameData } from '@/data/types'
+import { buildMaterials, effectiveMode, itemName, sortRows, totalIn, type MaterialIssue, type Route, type WeaponMode } from '@/lib/materials'
+import { armorById, weaponsById } from '@/state/build'
 import type { useBuild } from '@/state/useBuild'
 import { MaterialRow } from './MaterialRow'
 import { MaterialSources } from './MaterialSources'
@@ -37,27 +39,23 @@ function issueText(i: MaterialIssue): string {
   }
 }
 
-function useLookup(b: Build) {
-  const data = b.ctx.data
+/** Id lookups for the panel, from the shared per-data-set maps. */
+function useLookup(data: GameData) {
   return useMemo(() => {
-    const names = new Map<number, string>()
-    for (const x of data.items) names.set(x.id, x.name)
-    const materials = new Map(data.materials.map((x) => [x.id, x]))
-    for (const x of data.materials) names.set(x.id, x.name)
-    const armor = new Map(data.armor.map((a) => [a.id, a]))
     const weapons = weaponsById(data)
+    const armor = armorById(data)
     const lookup: Lookup = {
-      itemName: (id) => names.get(id) ?? `Item #${id}`,
+      itemName: (id) => itemName(data, id),
       weapon: (id) => weapons.get(id),
       armor: (id) => armor.get(id),
     }
-    return { lookup, materials }
+    return { lookup, materials: new Map(data.materials.map((x) => [x.id, x])) }
   }, [data])
 }
 
 export function MaterialsPanel({ b }: { b: Build }) {
   const data = b.ctx.data
-  const { lookup, materials } = useLookup(b)
+  const { lookup, materials } = useLookup(data)
   // Session-only UI state: never saved, never part of the build.
   const [mode, setMode] = useState<WeaponMode>('step')
   const [pickedRoute, setPickedRoute] = useState<{ weaponId: number; route: Route } | null>(null)
@@ -67,7 +65,7 @@ export function MaterialsPanel({ b }: { b: Build }) {
   const weaponId = sel.kind === 'data' ? sel.weaponId : null
   // A route chosen for another weapon is ignored, so the route resets when the equipped weapon changes.
   const route = pickedRoute && pickedRoute.weaponId === weaponId ? pickedRoute.route : undefined
-  const m = useMemo(() => buildMaterials(b.build, data, { weaponMode: mode, route }), [b.build, data, mode, route])
+  const m = useMemo(() => buildMaterials(b.build, data, { route }), [b.build, data, route])
 
   const steps = m.weaponPathSteps
   // The stored choice is kept; only what is shown and counted follows the effective mode.

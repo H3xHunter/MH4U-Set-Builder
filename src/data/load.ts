@@ -29,7 +29,9 @@ export class DataLoadError extends Error {
 async function fetchJson(baseUrl: string, file: string, fetchFn: typeof fetch): Promise<unknown> {
   let res: Response
   try {
-    res = await fetchFn(`${baseUrl}data/${file}.json`)
+    // The files are not content-hashed and Pages caches them for 10 minutes: revalidate (etag, so usually a 304)
+    // instead of mixing a new app with old data.
+    res = await fetchFn(`${baseUrl}data/${file}.json`, { cache: 'no-cache' })
   } catch (cause) {
     throw new DataLoadError(file, 'network error', { cause })
   }

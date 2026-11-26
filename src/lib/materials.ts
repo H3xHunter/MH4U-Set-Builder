@@ -1,5 +1,5 @@
 import { ARMOR_SLOTS, type ArmorSlot, type GameData, type Weapon } from '@/data/types'
-import type { BuildState } from '@/state/build'
+import { armorById, weaponsById, type BuildState } from '@/state/build'
 
 /*
  * Materials of a build. Pure functions; no React, no storage.
@@ -25,7 +25,8 @@ import type { BuildState } from '@/state/build'
  * the chain stops it ('noRecipe' issue). Cycles ('cycle') and depth over MAX_PATH_DEPTH ('depthCap') stop the chain.
  * Nothing here throws; problems are returned as issues.
  *
- * Totals: total = armor + weaponStep + (weaponMode 'path' ? weaponPath : 0). Rows whose total is 0 are left out.
+ * Rows carry their three parts (armor, weaponStep, weaponPath). What is shown is decided by `effectiveMode`, `totalIn`
+ * and `sortRows`: the path part counts only in 'path' mode, and rows whose shown total is 0 are left out.
  */
 
 export type Route = 'create' | 'improve'
@@ -64,7 +65,6 @@ export interface MaterialRow {
   armor: number
   weaponStep: number
   weaponPath: number
-  total: number
 }
 
 export interface BuildMaterials {
@@ -77,43 +77,27 @@ export interface BuildMaterials {
     lines: RecipeLine[]
     requiresWeaponId: number | null
   }
-  /** The path steps when weaponMode is 'path', else empty. */
-  weaponPath: PathStep[]
   /** Always computed, so the UI can show the chain length without switching modes. */
   weaponPathSteps: PathStep[]
   issues: MaterialIssue[]
 }
 
 export interface MaterialOptions {
-  weaponMode: WeaponMode
   /** Route of the equipped weapon; defaults to `defaultRoute`. A route the weapon does not have is an issue and the default is used. */
   route?: Route
 }
 
-interface Index {
-  weapons: Map<number, Weapon>
-  armor: Map<number, GameData['armor'][number]>
-  names: Map<number, string>
-}
-const indexes = new WeakMap<GameData, Index>()
-function indexOf(data: GameData): Index {
-  let i = indexes.get(data)
-  if (!i) {
-    const names = new Map<number, string>()
-    for (const x of data.items) names.set(x.id, x.name)
-    for (const x of data.materials) names.set(x.id, x.name) // materials first: they win over items
-    i = {
-      weapons: new Map(data.weapons.map((w) => [w.id, w])),
-      armor: new Map(data.armor.map((a) => [a.id, a])),
-      names,
-    }
-    indexes.set(data, i)
+const nameMaps = new WeakMap<GameData, Map<number, string>>()
+/** Name of an item or material (materials win over items); undefined when the id is unknown. */
+export function lookupItemName(data: GameData, id: number): string | undefined {
+  let m = nameMaps.get(data)
+  if (!m) {
+    m = new Map([...data.items, ...data.materials].map((x) => [x.id, x.name]))
+    nameMaps.set(data, m)
   }
-  return i
+  return m.get(id)
 }
-
-/** Built once per data set. */
-export const weaponsById = (data: GameData): ReadonlyMap<number, Weapon> => indexOf(data).weapons
+export const itemName = (data: GameData, id: number): string => lookupItemName(data, id) ?? `Item #${id}`
 
 const linesOf = (w: Weapon, route: Route): RecipeLine[] =>
   w.materials.filter((m) => m.kind === route).map(({ itemId, quantity }) => ({ itemId, quantity }))
@@ -186,8 +170,9 @@ export function weaponChain(
   return { steps: found.reverse(), issues }
 }
 
-export function buildMaterials(build: BuildState, data: GameData, options: MaterialOptions): BuildMaterials {
-  const idx = indexOf(data)
+export function buildMaterials(build: BuildState, data: GameData, options: MaterialOptions = {}): BuildMaterials {
+  const weapons = weaponsById(data)
+  const armors = armorById(data)
   const issues: MaterialIssue[] = []
   const rows = new Map<number, MaterialRow>()
   const unknown = new Set<number>()
@@ -196,12 +181,11 @@ export function buildMaterials(build: BuildState, data: GameData, options: Mater
     for (const { itemId, quantity } of lines) {
       let row = rows.get(itemId)
       if (!row) {
-        const name = idx.names.get(itemId)
-        if (name === undefined && !unknown.has(itemId)) {
+        if (lookupItemName(data, itemId) === undefined && !unknown.has(itemId)) {
           unknown.add(itemId)
           issues.push({ kind: 'unknownItem', itemId })
         }
-        row = { itemId, name: name ?? `Item #${itemId}`, armor: 0, weaponStep: 0, weaponPath: 0, total: 0 }
+        row = { itemId, name: itemName(data, itemId), armor: 0, weaponStep: 0, weaponPath: 0 }
         rows.set(itemId, row)
       }
       row[part] += quantity
@@ -212,7 +196,7 @@ export function buildMaterials(build: BuildState, data: GameData, options: Mater
   for (const slot of ARMOR_SLOTS) {
     const sel = build.armor[slot]
     if (!sel) continue
-    const armor = idx.armor.get(sel.armorId)
+    const armor = armors.get(sel.armorId)
     if (!armor) {
       issues.push({ kind: 'unknownArmor', armorId: sel.armorId })
       continue
@@ -225,7 +209,7 @@ export function buildMaterials(build: BuildState, data: GameData, options: Mater
     add(lines, 'armor')
   }
 
-  const weapon = build.weapon.kind === 'data' ? (idx.weapons.get(build.weapon.weaponId) ?? null) : null
+  const weapon = build.weapon.kind === 'data' ? (weapons.get(build.weapon.weaponId) ?? null) : null
   if (build.weapon.kind === 'data' && !weapon) issues.push({ kind: 'unknownWeapon', weaponId: build.weapon.weaponId })
 
   let weaponPathSteps: PathStep[] = []
@@ -248,26 +232,14 @@ export function buildMaterials(build: BuildState, data: GameData, options: Mater
       weaponStep.lines = linesOf(weapon, route)
       weaponStep.requiresWeaponId = weapon.requiresWeapon[route]
     }
-    const chain = weaponChain(weapon, route, idx.weapons)
+    const chain = weaponChain(weapon, route, weapons)
     weaponPathSteps = chain.steps
     issues.push(...chain.issues)
     add(weaponStep.lines, 'weaponStep')
     for (const s of weaponPathSteps) add(s.lines, 'weaponPath')
   }
 
-  for (const [id, row] of rows) {
-    row.total = row.armor + row.weaponStep + (options.weaponMode === 'path' ? row.weaponPath : 0)
-    if (row.total === 0) rows.delete(id)
-  }
-
-  return {
-    rows,
-    perArmorPiece,
-    weaponStep,
-    weaponPath: options.weaponMode === 'path' ? weaponPathSteps : [],
-    weaponPathSteps,
-    issues,
-  }
+  return { rows, perArmorPiece, weaponStep, weaponPathSteps, issues }
 }
 
 /** The stored mode, except that a path with no steps is always 'step' (the stored choice is left alone by the caller). */

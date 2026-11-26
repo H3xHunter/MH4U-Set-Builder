@@ -35,7 +35,6 @@ describe('sourceView on real data', () => {
     expect(v.quests.map((q) => q.percentage)).toEqual([45, 45, 45, 14, 13, 45].sort((a, b) => b - a))
     expect(v.quests[0]).toMatchObject({ hub: expect.any(String), stars: expect.any(Number), slot: expect.stringMatching(/^(A|B|Sub)$/) })
     expect(v.coverage).toBe('shown')
-    expect(v.issues).toEqual([])
   })
 
   it('Machalite Ore (205): four identical Ancestral Steppe Area 7 Mine LR 9% rows collapse to x4; nothing is dropped', () => {
@@ -90,7 +89,6 @@ describe('sourceView on real data', () => {
     const v = sourceView(mat(1094), real)
     expect(v.wyporium).toEqual([{ handInItemId: 390, handInName: 'G.Jaggi Claw', unlockQuest: { name: 'Swing into Action', hub: 'Caravan', stars: 3 } }])
     expect(v.coverage).toBe('shown')
-    expect(v.issues).toEqual([])
   })
 
   it('Wyporium: Nargacuga Cutwing+ (1184) is in two trades, sorted by hand-in name', () => {
@@ -99,6 +97,18 @@ describe('sourceView on real data', () => {
       [744, 'Zinogre Claw', 'Uncorner the Market', 'Caravan', 5],
       [746, 'Zinogre Hardclaw', 'Advanced: Bolt of Pink', 'Guild', 9],
     ])
+  })
+
+  it('data invariant: the 128 Wyporium trades have no duplicate trade and no reversed pair (sourceView does not collapse them)', () => {
+    // Every trade is stored under both of its materials; the received side lists it once per trade.
+    const trades = real.materials.flatMap((m) => m.sources.wyporium.filter((w) => w.itemInId === m.id))
+    expect(trades).toHaveLength(128)
+    const key = (a: number, b: number, q: number | null) => `${a}>${b}>${q}`
+    const keys = trades.map((w) => key(w.itemInId, w.itemOutId, w.unlockQuestId))
+    expect(new Set(keys).size).toBe(keys.length) // no two share (itemInId, itemOutId, unlockQuestId)
+    const pairs = new Set(trades.map((w) => `${w.itemInId}>${w.itemOutId}`))
+    expect(pairs.size).toBe(trades.length) // not even the same pair with another unlock quest
+    expect(trades.filter((w) => pairs.has(`${w.itemOutId}>${w.itemInId}`))).toEqual([]) // A in/B out and B in/A out
   })
 
   it('Wyporium: a material that is only the hand-in side gets no Wyporium rows (G.Jaggi Claw 390)', () => {
@@ -120,7 +130,6 @@ describe('sourceView on real data', () => {
     expect(v.arena.map((r) => r.questName)).toEqual(expect.arrayContaining(['Grudge Match: Yian Kut-Ku', 'Grudge Match: Kecha Wacha']))
     expect(v.arena.every((r) => r.percentage > 0 && r.stackSize >= 1)).toBe(true)
     // arena ids 1..16 overlap quest ids: the names above come from kind 'arena', not 'quest'
-    expect(v.issues).toEqual([])
     const p = v.arena.map((r) => r.percentage)
     expect(p).toEqual([...p].sort((a, b) => b - a))
   })
@@ -157,9 +166,9 @@ describe('sourceView on real data', () => {
     expect(fatalis.map((d) => formatChance(d.percentage))).toContain('0%')
   })
 
-  it('names resolve with no issues for every material in the data', () => {
-    const issues = real.materials.flatMap((m) => sourceView(m, real).issues)
-    expect(issues).toEqual([])
+  it('every id in the data resolves: no fallback name appears anywhere', () => {
+    const text = JSON.stringify(real.materials.map((m) => sourceView(m, real)))
+    expect(text).not.toMatch(/(Monster|Location|Quest|Arena quest|Item) #\d/)
   })
 })
 
@@ -175,7 +184,7 @@ describe('sourceView fixtures', () => {
   })
   const data = (over: Partial<GameData> = {}) => mkData(over)
 
-  it('unknown ids get fallback names and are listed once as issues, without throwing', () => {
+  it('unknown ids get fallback names without throwing', () => {
     const m = material({
       drops: [
         { monsterId: 9, rank: 'LR', condition: 'c', percentage: 5, stackSize: 1 },
@@ -188,7 +197,6 @@ describe('sourceView fixtures', () => {
     expect(v.drops.map((d) => d.monsterName)).toEqual(['Monster #9', 'Monster #9'])
     expect(v.gathering[0].locationName).toBe('Location #7')
     expect(v.quests[0].questName).toBe('Quest #3')
-    expect(v.issues).toEqual([{ kind: 'unknownMonster', id: 9 }, { kind: 'unknownLocation', id: 7 }, { kind: 'unknownQuest', id: 3 }])
   })
 
   it('quests are looked up by (kind, id): an arena quest with the same id is not used', () => {
@@ -236,7 +244,7 @@ describe('sourceView fixtures', () => {
     expect(rows.sort(byChance((r) => r.n)).map((r) => `${r.percentage}${r.n}`)).toEqual(['20z', '10a', '10b', 'nulla'])
   })
 
-  it('fixture: arena, wyporium (received side only), veggie elder and combining; unknown ids fall back and are listed', () => {
+  it('fixture: arena, wyporium (received side only), veggie elder and combining; unknown ids fall back', () => {
     const d = data({
       quests: [
         { id: 7, kind: 'quest', name: 'Real Quest', hub: 'Guild', type: 'Normal', stars: 6 },
@@ -269,7 +277,6 @@ describe('sourceView fixtures', () => {
     expect(v.veggieElder).toBe(true)
     expect(v.coverage).toBe('shown')
     expect(v.otherKinds).toEqual(['Combining'])
-    expect(v.issues).toEqual([{ kind: 'unknownArenaQuest', id: 99 }, { kind: 'unknownItem', id: 51 }, { kind: 'unknownQuest', id: 8 }])
   })
 
   it('fixture: a material that is only the hand-in side and has nothing else is "none"', () => {

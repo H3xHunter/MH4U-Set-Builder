@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { DATA_FILES } from '@/data/load'
 import type { GameData, Item, Material, Weapon, WeaponMaterial } from '@/data/types'
 import { validateGameData } from '@/data/validate'
-import { emptyBuild, type BuildState } from '@/state/build'
+import { emptyBuild, weaponsById, type BuildState } from '@/state/build'
 import { mkArmor, mkData, mkWeapon } from '@/state/fixtures'
 import {
   availableRoutes,
@@ -15,7 +15,6 @@ import {
   sortRows,
   totalIn,
   weaponChain,
-  weaponsById,
   type MaterialOptions,
 } from './materials'
 
@@ -29,7 +28,7 @@ const wid = (data: GameData, id: number) => {
 }
 const withWeapon = (id: number): BuildState => ({ ...emptyBuild(), weapon: { kind: 'data', weaponId: id } })
 const pairs = (lines: { itemId: number; quantity: number }[]) => lines.map((l) => [l.itemId, l.quantity])
-const OPEN: MaterialOptions = { weaponMode: 'path' }
+const OPEN: MaterialOptions = {}
 
 describe('real data: weapon step and path', () => {
   it('Lacerator Blade (5007): improve only; step excludes the weapon ingredient; path is 5006 create', () => {
@@ -39,16 +38,17 @@ describe('real data: weapon step and path', () => {
     const r = buildMaterials(withWeapon(5007), real, OPEN)
     expect(r.weaponStep.route).toBe('improve')
     expect(pairs(r.weaponStep.lines)).toEqual([[213, 5], [207, 4], [266, 3]]) // Carbalite, Lightcrystal, Hercudrome
-    expect(r.weaponPath.map((s) => [s.weaponId, s.kind])).toEqual([[5006, 'create']])
-    expect(pairs(r.weaponPath[0].lines)).toEqual([[209, 3], [206, 15], [205, 10]]) // Firestone, Dragonite, Machalite
+    expect(r.weaponPathSteps.map((s) => [s.weaponId, s.kind])).toEqual([[5006, 'create']])
+    expect(pairs(r.weaponPathSteps[0].lines)).toEqual([[209, 3], [206, 15], [205, 10]]) // Firestone, Dragonite, Machalite
     expect(r.issues).toEqual([])
     // totals: path mode adds 5006's create lines, step mode does not (but still reports the chain)
-    expect(r.rows.get(205)).toMatchObject({ name: 'Machalite Ore', weaponStep: 0, weaponPath: 10, total: 10 })
-    const step = buildMaterials(withWeapon(5007), real, { weaponMode: 'step' })
-    expect(step.rows.has(205)).toBe(false)
-    expect(step.weaponPath).toEqual([])
-    expect(step.weaponPathSteps).toHaveLength(1)
-    expect(step.rows.get(213)?.total).toBe(5)
+    expect(r.rows.get(205)).toMatchObject({ name: 'Machalite Ore', weaponStep: 0, weaponPath: 10 })
+    expect(totalIn(r.rows.get(205)!, 'path')).toBe(10)
+    // in step mode the same rows show no Machalite (the part exists, it just does not count) and the chain is still reported
+    expect(totalIn(r.rows.get(205)!, 'step')).toBe(0)
+    expect(sortRows(r.rows.values(), 'step').some((x) => x.itemId === 205)).toBe(false)
+    expect(r.weaponPathSteps).toHaveLength(1)
+    expect(totalIn(r.rows.get(213)!, 'step')).toBe(5)
   })
 
   it('Iron Sword (5001): root, create only, standalone, path empty', () => {
@@ -68,9 +68,9 @@ describe('real data: weapon step and path', () => {
     const create = buildMaterials(withWeapon(5002), real, OPEN)
     expect(create.weaponStep.route).toBe('create')
     expect(create.weaponPathSteps).toEqual([])
-    const improve = buildMaterials(withWeapon(5002), real, { weaponMode: 'path', route: 'improve' })
+    const improve = buildMaterials(withWeapon(5002), real, { route: 'improve' })
     expect(improve.weaponStep.route).toBe('improve')
-    expect(improve.weaponPath.map((s) => [s.weaponId, s.kind])).toEqual([[5001, 'create']])
+    expect(improve.weaponPathSteps.map((s) => [s.weaponId, s.kind])).toEqual([[5001, 'create']])
   })
 
   it('Buster Sword (5003): create that requires 5002 is not standalone; the path continues from 5002', () => {
@@ -78,24 +78,25 @@ describe('real data: weapon step and path', () => {
     expect(r.weaponStep.route).toBe('create')
     expect(r.weaponStep.requiresWeaponId).toBe(5002)
     // chain: 5003 (create, needs 5002) <- 5002 Iron Sword+ (standalone create, stop)
-    expect(r.weaponPath.map((s) => [s.weaponId, s.kind, s.requiresWeaponId])).toEqual([[5002, 'create', null]])
-    expect(r.rows.get(203)).toMatchObject({ weaponStep: 8, weaponPath: 5, total: 13 })
+    expect(r.weaponPathSteps.map((s) => [s.weaponId, s.kind, s.requiresWeaponId])).toEqual([[5002, 'create', null]])
+    expect(r.rows.get(203)).toMatchObject({ weaponStep: 8, weaponPath: 5 })
+    expect(totalIn(r.rows.get(203)!, 'path')).toBe(13)
   })
 
   it('Ukanlos Skyflier (7303): improve requires 7302 while parentId is null; no noParent issue', () => {
     expect(wid(real, 7303).parentId).toBeNull()
     const r = buildMaterials(withWeapon(7303), real, OPEN)
     expect(r.weaponStep).toMatchObject({ route: 'improve', requiresWeaponId: 7302 })
-    expect(r.weaponPath.map((s) => [s.weaponId, s.kind])).toEqual([[7302, 'create']])
+    expect(r.weaponPathSteps.map((s) => [s.weaponId, s.kind])).toEqual([[7302, 'create']])
     expect(r.issues).toEqual([])
   })
 
   it('Dios Katana (5257): improve follows requiresWeapon 5267, not parent 5248', () => {
-    const r = buildMaterials(withWeapon(5257), real, { weaponMode: 'path', route: 'improve' })
-    const ids = r.weaponPath.map((s) => s.weaponId)
+    const r = buildMaterials(withWeapon(5257), real, { route: 'improve' })
+    const ids = r.weaponPathSteps.map((s) => s.weaponId)
     expect(ids[ids.length - 1]).toBe(5267)
     expect(ids).not.toContain(5248)
-    expect(r.weaponPath[0].kind).toBe('create') // the chain starts at a standalone create
+    expect(r.weaponPathSteps[0].kind).toBe('create') // the chain starts at a standalone create
     // default route is create (it has create lines): no path
     expect(buildMaterials(withWeapon(5257), real, OPEN).weaponPathSteps).toEqual([])
   })
@@ -120,7 +121,7 @@ describe('real data: weapon step and path', () => {
 
   it('an unknown weapon id and an unavailable route are issues, not crashes', () => {
     expect(buildMaterials(withWeapon(99999), real, OPEN).issues).toEqual([{ kind: 'unknownWeapon', weaponId: 99999 }])
-    const r = buildMaterials(withWeapon(5001), real, { weaponMode: 'step', route: 'improve' })
+    const r = buildMaterials(withWeapon(5001), real, { route: 'improve' })
     expect(r.issues).toEqual([{ kind: 'routeUnavailable', weaponId: 5001, route: 'improve' }])
     expect(r.weaponStep.route).toBe('create')
   })
@@ -135,18 +136,20 @@ describe('real data: armor and shared materials', () => {
 
   it('Alloy Greaves (Machalite x4) + Lacerator path (Machalite x10) = 14 in path mode, 4 in step mode', () => {
     const b = armorBuild({ weapon: { kind: 'data', weaponId: 5007 } })
-    const path = buildMaterials(b, real, { weaponMode: 'path' })
-    expect(path.rows.get(205)).toMatchObject({ armor: 4, weaponStep: 0, weaponPath: 10, total: 14 })
+    const path = buildMaterials(b, real)
+    expect(path.rows.get(205)).toMatchObject({ armor: 4, weaponStep: 0, weaponPath: 10 })
+    expect(totalIn(path.rows.get(205)!, 'path')).toBe(14)
     expect(path.perArmorPiece).toEqual([
       { slot: 'legs', armorId: 1953, name: 'Alloy Greaves', lines: [{ itemId: 205, quantity: 4 }, { itemId: 204, quantity: 2 }, { itemId: 203, quantity: 2 }] },
     ])
-    const step = buildMaterials(b, real, { weaponMode: 'step' })
-    expect(step.rows.get(205)).toMatchObject({ armor: 4, weaponPath: 10, total: 4 })
+    expect(path.rows.get(205)).toMatchObject({ armor: 4, weaponPath: 10 })
+    expect(totalIn(path.rows.get(205)!, 'step')).toBe(4)
   })
 
   it('Ravager Blade+ (5006) as the weapon: its own Machalite x10 is a weapon step part', () => {
-    const r = buildMaterials(armorBuild({ weapon: { kind: 'data', weaponId: 5006 } }), real, { weaponMode: 'step' })
-    expect(r.rows.get(205)).toMatchObject({ armor: 4, weaponStep: 10, weaponPath: 0, total: 14 })
+    const r = buildMaterials(armorBuild({ weapon: { kind: 'data', weaponId: 5006 } }), real)
+    expect(r.rows.get(205)).toMatchObject({ armor: 4, weaponStep: 10, weaponPath: 0 })
+    expect(totalIn(r.rows.get(205)!, 'step')).toBe(14)
   })
 
   it('a piece with no recipe is listed as null and contributes nothing', () => {
@@ -172,7 +175,7 @@ describe('fixtures', () => {
     const d = data([imp(1, 2), imp(2, 1)])
     const r = buildMaterials(withWeapon(1), d, OPEN)
     expect(r.issues).toEqual([{ kind: 'cycle', weaponIds: [1, 2, 1] }])
-    expect(r.weaponPath.map((s) => s.weaponId)).toEqual([2])
+    expect(r.weaponPathSteps.map((s) => s.weaponId)).toEqual([2])
     expect(buildMaterials(withWeapon(1), data([imp(1, 1)]), OPEN).issues).toEqual([{ kind: 'cycle', weaponIds: [1, 1] }])
   })
 
@@ -185,7 +188,7 @@ describe('fixtures', () => {
   it('an improve chain that reaches a root without parent is a noParent issue', () => {
     const r = buildMaterials(withWeapon(2), data([imp(1, null), imp(2, 1)]), OPEN)
     expect(r.issues).toEqual([{ kind: 'noParent', weaponId: 1 }])
-    expect(r.weaponPath.map((s) => [s.weaponId, s.kind])).toEqual([[1, 'improve']])
+    expect(r.weaponPathSteps.map((s) => [s.weaponId, s.kind])).toEqual([[1, 'improve']])
     expect(buildMaterials(withWeapon(1), data([imp(1, null)]), OPEN).issues).toEqual([{ kind: 'noParent', weaponId: 1 }])
   })
 
@@ -210,8 +213,9 @@ describe('fixtures', () => {
       imp(3, 2),
     ]
     const r = buildMaterials(withWeapon(3), data(weapons), OPEN)
-    expect(r.weaponPath.map((s) => [s.weaponId, s.kind, s.requiresWeaponId])).toEqual([[1, 'create', null], [2, 'create', 1]])
-    expect(r.rows.get(1)).toMatchObject({ weaponStep: 1, weaponPath: 5, total: 6 })
+    expect(r.weaponPathSteps.map((s) => [s.weaponId, s.kind, s.requiresWeaponId])).toEqual([[1, 'create', null], [2, 'create', 1]])
+    expect(r.rows.get(1)).toMatchObject({ weaponStep: 1, weaponPath: 5 })
+    expect(totalIn(r.rows.get(1)!, 'path')).toBe(6)
   })
 
   it('improve is preferred over a create that needs a weapon; a standalone create wins over improve', () => {
@@ -230,7 +234,7 @@ describe('fixtures', () => {
     const b: BuildState = { ...emptyBuild(), armor: { ...emptyBuild().armor, head: { armorId: 5, decos: [] }, legs: { armorId: 404, decos: [] } } }
     const r = buildMaterials(b, d, OPEN)
     expect(r.issues).toEqual([{ kind: 'unknownItem', itemId: 777 }, { kind: 'unknownArmor', armorId: 404 }])
-    expect(r.rows.get(777)).toMatchObject({ name: 'Item #777', armor: 2, total: 2 })
+    expect(r.rows.get(777)).toMatchObject({ name: 'Item #777', armor: 2 })
   })
 
   it('names fall back from materials to items', () => {
@@ -250,7 +254,7 @@ describe('effective mode and totals ordering', () => {
     expect(effectiveMode('step', 0)).toBe('step')
   })
 
-  const row = (itemId: number, name: string, armor: number, weaponStep: number, weaponPath: number) => ({ itemId, name, armor, weaponStep, weaponPath, total: 0 })
+  const row = (itemId: number, name: string, armor: number, weaponStep: number, weaponPath: number) => ({ itemId, name, armor, weaponStep, weaponPath })
 
   it('sortRows: total descending in the mode, then name; path quantities count only in path mode; zero totals are dropped', () => {
     const rows = [row(1, 'Beta', 2, 0, 0), row(2, 'Alpha', 1, 0, 1), row(3, 'Gamma', 0, 0, 5), row(4, 'Delta', 2, 0, 0)]
@@ -264,7 +268,7 @@ describe('effective mode and totals ordering', () => {
       weapon: { kind: 'data', weaponId: 5007 },
       armor: { head: null, chest: { armorId: 3781, decos: [] }, arms: { armorId: 3754, decos: [] }, waist: null, legs: { armorId: 1953, decos: [] } },
     }
-    const m = buildMaterials(build, real, { weaponMode: 'path' })
+    const m = buildMaterials(build, real)
     const first = (mode: 'step' | 'path') => sortRows(m.rows.values(), mode).slice(0, 5).map((r) => [r.name, totalIn(r, mode)])
     expect(first('step')).toEqual([['Carbalite Ore', 5], ['Konchu Cortex', 5], ['Eltalite Ore', 4], ['Konchu Carapace', 4], ['Lightcrystal', 4]])
     expect(first('path')[0]).toEqual(['Dragonite Ore', 15])
