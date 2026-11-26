@@ -71,6 +71,8 @@
   --element-thunder: #f2d200;
   --element-ice: #7fd6f0;
   --element-dragon: #b28cff;
+  /* Materials that come from earlier steps of the weapon path (placeholder). */
+  --material-path: #4FD1C5;
   --jewel-blue: #3b6fe0;
   --jewel-cyan: #2ec4d6;
   --jewel-green: #3fae49;

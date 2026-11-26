@@ -8,7 +8,7 @@ export function Segmented<T extends string>({
 }: {
   value: T
   onChange: (v: T) => void
-  options: readonly { value: T; label: string }[]
+  options: readonly { value: T; label: string; disabled?: boolean; title?: string }[]
   label: string
 }) {
   return (
@@ -25,6 +25,8 @@ export function Segmented<T extends string>({
         <ToggleGroupItem
           key={o.value}
           value={o.value}
+          disabled={o.disabled}
+          title={o.title}
           className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
         >
           {o.label}

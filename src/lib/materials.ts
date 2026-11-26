@@ -269,3 +269,16 @@ export function buildMaterials(build: BuildState, data: GameData, options: Mater
     issues,
   }
 }
+
+/** The stored mode, except that a path with no steps is always 'step' (the stored choice is left alone by the caller). */
+export const effectiveMode = (stored: WeaponMode, pathSteps: number): WeaponMode => (stored === 'path' && pathSteps > 0 ? 'path' : 'step')
+
+/** The main quantity of a row: the path part counts only in 'path' mode. */
+export const totalIn = (row: MaterialRow, mode: WeaponMode): number => row.armor + row.weaponStep + (mode === 'path' ? row.weaponPath : 0)
+
+/** Rows with a positive total in this mode, largest total first, then name ascending (then item id). */
+export function sortRows(rows: Iterable<MaterialRow>, mode: WeaponMode): MaterialRow[] {
+  return [...rows]
+    .filter((r) => totalIn(r, mode) > 0)
+    .sort((a, b) => totalIn(b, mode) - totalIn(a, mode) || (a.name < b.name ? -1 : a.name > b.name ? 1 : a.itemId - b.itemId))
+}

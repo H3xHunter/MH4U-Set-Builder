@@ -10,7 +10,10 @@ import {
   availableRoutes,
   buildMaterials,
   defaultRoute,
+  effectiveMode,
   MAX_PATH_DEPTH,
+  sortRows,
+  totalIn,
   weaponChain,
   weaponsById,
   type MaterialOptions,
@@ -236,5 +239,38 @@ describe('fixtures', () => {
     expect(r.rows.get(9)?.name).toBe('Item Nine')
     expect(r.rows.get(1)?.name).toBe('Ore') // materials win
     expect(r.issues).toEqual([])
+  })
+})
+
+describe('effective mode and totals ordering', () => {
+  it('effectiveMode: a path with no steps is always step; the stored choice is not touched', () => {
+    expect(effectiveMode('path', 0)).toBe('step')
+    expect(effectiveMode('path', 3)).toBe('path')
+    expect(effectiveMode('step', 3)).toBe('step')
+    expect(effectiveMode('step', 0)).toBe('step')
+  })
+
+  const row = (itemId: number, name: string, armor: number, weaponStep: number, weaponPath: number) => ({ itemId, name, armor, weaponStep, weaponPath, total: 0 })
+
+  it('sortRows: total descending in the mode, then name; path quantities count only in path mode; zero totals are dropped', () => {
+    const rows = [row(1, 'Beta', 2, 0, 0), row(2, 'Alpha', 1, 0, 1), row(3, 'Gamma', 0, 0, 5), row(4, 'Delta', 2, 0, 0)]
+    expect(sortRows(rows, 'step').map((r) => r.name)).toEqual(['Beta', 'Delta', 'Alpha']) // Gamma has only path quantity
+    expect(sortRows(rows, 'path').map((r) => [r.name, totalIn(r, 'path')])).toEqual([['Gamma', 5], ['Alpha', 2], ['Beta', 2], ['Delta', 2]])
+  })
+
+  it('real build (Ioprey Mail X, Alloy Greaves, Konchu Vambraces X, Lacerator Blade): the order changes between step and path mode', () => {
+    const build: BuildState = {
+      ...emptyBuild(),
+      weapon: { kind: 'data', weaponId: 5007 },
+      armor: { head: null, chest: { armorId: 3781, decos: [] }, arms: { armorId: 3754, decos: [] }, waist: null, legs: { armorId: 1953, decos: [] } },
+    }
+    const m = buildMaterials(build, real, { weaponMode: 'path' })
+    const first = (mode: 'step' | 'path') => sortRows(m.rows.values(), mode).slice(0, 5).map((r) => [r.name, totalIn(r, mode)])
+    expect(first('step')).toEqual([['Carbalite Ore', 5], ['Konchu Cortex', 5], ['Eltalite Ore', 4], ['Konchu Carapace', 4], ['Lightcrystal', 4]])
+    expect(first('path')[0]).toEqual(['Dragonite Ore', 15])
+    expect(first('path')[1]).toEqual(['Machalite Ore', 14])
+    expect(first('step').map((r) => r[0])).not.toEqual(first('path').map((r) => r[0]))
+    expect(sortRows(m.rows.values(), 'step').length).toBe(14)
+    expect(sortRows(m.rows.values(), 'path').length).toBe(16)
   })
 })
