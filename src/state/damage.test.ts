@@ -25,7 +25,7 @@ describe('deriveDamage', () => {
   it('uses the build skill totals', () => {
     const d = deriveBuild(build([{ type: 'setArmor', slot: 'head', armorId: 1 }, { type: 'setWeapon', weapon: { kind: 'data', weaponId: 100 } }]), ctx)
     expect(skillTotals(d.skills)).toEqual({ 31: 12 })
-    const r = deriveDamage(d, { ...DEFAULT_TOGGLES, 'skill:challenger': false })
+    const r = deriveDamage(d, { ...DEFAULT_TOGGLES, 'item:powercharm': false, 'item:powertalon': false, 'skill:challenger': false })
     expect(r).toMatchObject({ ok: true, trueRaw: 100, rawBeforeSong: 110 }) // 12 points = tier 10 = +10
   })
 })

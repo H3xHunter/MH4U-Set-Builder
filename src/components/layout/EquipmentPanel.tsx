@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ARMOR_SLOTS, type ArmorSlot } from '@/data/types'
 import { capacityOf, decosOf, findArmor, findDeco, resolveCharm, resolveWeapon } from '@/state/build'
+import type { DamageState } from '@/state/useDamageControls'
 import type { useBuild } from '@/state/useBuild'
 import { MobileSummary } from './MobileSummary'
 import { Section, displayHeading } from './Section'
@@ -14,12 +15,14 @@ const noop = () => {}
 
 export function EquipmentPanel({
   b,
+  dmg,
   onPick,
   onAddDeco,
   onPickWeapon,
   onPickCharm,
 }: {
   b: ReturnType<typeof useBuild>
+  dmg: DamageState
   onPick: (slot: ArmorSlot) => void
   onAddDeco: (key: ArmorSlot | 'weapon' | 'charm') => void
   onPickWeapon: () => void
@@ -43,7 +46,7 @@ export function EquipmentPanel({
         </span>
       }
     >
-      <MobileSummary b={b} />
+      <MobileSummary b={b} dmg={dmg} />
       {empty && (
         <Card className="mb-3 gap-3 py-4">
           <div className="space-y-3 px-4">

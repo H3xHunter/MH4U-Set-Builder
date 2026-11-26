@@ -1,4 +1,4 @@
-import type { Weapon } from '@/data/types'
+import type { SkillTree, Weapon } from '@/data/types'
 import { BUFF_SOURCES, BUFFS, EFFECT_TYPES, type Buff, type BuffSource, type EffectType } from './buffRegistry'
 import * as T from './damageTables'
 import { activeTier } from './skills'
@@ -81,6 +81,8 @@ export type DamageResult =
       trueRaw: number
       /** True raw after percent and flat groups, before songs, sharpness and crit. */
       rawBeforeSong: number
+      /** rawBeforeSong times the song multiplier (the "raw after buffs" the card shows). */
+      rawAfterBuffs: number
       /** Percentage points, clamped to [-100, 100]. */
       affinity: number
       critFactor: number
@@ -120,14 +122,38 @@ export interface ToggleEntry {
   default: boolean
 }
 
-/** The toggleable buffs to show for this build, by source (skill, item, song, kinsect); empty sources are left out. */
-export function listToggles(weapon: Weapon, skills: SkillTotals, registry: Registry = BUFFS): { source: BuffSource; buffs: ToggleEntry[] }[] {
+/**
+ * The toggleable buffs to show for this build, by source (skill, item, song, kinsect); empty sources are left out.
+ * A skill buff is labeled with the name of the tier the build reaches ("Attack Up (L)") when `trees` is given.
+ */
+export function listToggles(
+  weapon: Weapon,
+  skills: SkillTotals,
+  registry: Registry = BUFFS,
+  trees: readonly SkillTree[] = [],
+): { source: BuffSource; buffs: ToggleEntry[] }[] {
+  const tierName = (b: Buff): string | undefined =>
+    b.skill ? activeTier(trees.find((t) => t.id === b.skill?.tree)?.tiers ?? [], skills[b.skill.tree] ?? 0)?.name : undefined
   return BUFF_SOURCES.map((source) => ({
     source,
     buffs: registry
       .filter((b) => b.source === source && b.toggle && isAvailable(b, weapon, skills))
-      .map((b) => ({ id: b.id, label: b.label, condition: b.toggle?.condition ?? null, default: b.toggle?.default ?? true })),
+      .map((b) => ({ id: b.id, label: tierName(b) ?? b.label, condition: b.toggle?.condition ?? null, default: b.toggle?.default ?? true })),
   })).filter((g) => g.buffs.length > 0)
+}
+
+/** The kinsect combination that currently applies (the best one), or null: label and percent of raw. */
+export function activeKinsect(weapon: Weapon, skills: SkillTotals, toggles: DamageToggles, registry: Registry = BUFFS): { label: string; percent: number } | null {
+  const on = registry.filter((b) => isAvailable(b, weapon, skills) && toggleState(b, toggles))
+  const ids = new Set(on.map((b) => b.id))
+  let best: { label: string; percent: number } | null = null
+  for (const b of on.filter((x) => x.source === 'kinsect')) {
+    for (const e of b.effects) {
+      if (e.type !== 'rawPercent' || typeof e.value !== 'number' || !e.needs?.every((id) => ids.has(id))) continue
+      if (!best || e.value > best.percent) best = { label: b.label, percent: e.value }
+    }
+  }
+  return best
 }
 
 /** An effect of an active buff, resolved for the buff's tier: v is a signed amount (add types) or a factor (mult types). */
@@ -225,7 +251,8 @@ export function calculateDamage({ weapon, skills, toggles, sharpnessColor }: Dam
   const affinity = Math.min(100, Math.max(-100, baseAffinity(weapon) + combine(active, 'affinityAdd')))
   const critFactor = 1 + (T.CRIT_BONUS * affinity) / 100 // negative affinity: 1 - 0.25 * |A|
 
-  const efrTrue = rawBeforeSong * combine(active, 'songRaw') * T.SHARPNESS_RAW[selected] * critFactor
+  const songRaw = combine(active, 'songRaw')
+  const efrTrue = rawBeforeSong * songRaw * T.SHARPNESS_RAW[selected] * critFactor
 
   const awakenActive = hasFlag(active, 'awaken')
   const slots = [
@@ -250,6 +277,7 @@ export function calculateDamage({ weapon, skills, toggles, sharpnessColor }: Dam
     ok: true,
     trueRaw: r0,
     rawBeforeSong,
+    rawAfterBuffs: rawBeforeSong * songRaw,
     affinity,
     critFactor,
     sharpness: { bar, selectable, selected },

@@ -17,6 +17,10 @@ describe('index.css tokens', () => {
     expect(defined('material-path')).toBe(true)
   })
 
+  it.each(['red', 'orange', 'yellow', 'green', 'blue', 'white', 'purple'])('defines the %s sharpness token', (c) => {
+    expect(defined(`sharp-${c}`)).toBe(true)
+  })
+
   it.each(['fire', 'water', 'thunder', 'ice', 'dragon'])('defines the %s element token', (e) => {
     expect(defined(`element-${e}`)).toBe(true)
   })

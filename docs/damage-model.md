@@ -24,6 +24,11 @@ A buff: `id`, `label`, `source` (`skill`, `item`, `song`, `kinsect`), availabili
 - **Available** means the weapon class fits and the skill's total points reach one of its tiers. Items are always available.
 - **Active** means available and, if the buff has a toggle, switched on (a missing id uses the default). A buff without a
   toggle is always on while available.
+- **Every skill buff has a toggle, default on**, so a skill can be switched off in the calculation only (the build does not
+  change). A skill that is switched off contributes none of its effects, flags included: Handicraft or Edgemaster off means
+  the base sharpness bar; Tenderizer or Brutality off removes the weakness-exploit flag; Awaken off locks the awaken element.
+- **Defaults:** Powercharm and Powertalon on (players always carry them), every skill on, Challenger (raged monster) on, songs
+  and kinsect buffs on. Any other item would default off.
 - A skill effect's `value` is per positive tier. A negative tier `-n` uses the value of tier `n` inverted: negated for an
   add type, divided for a mult type (percent `p` is the factor `1 + p/100`). Negative tiers are never written as separate numbers.
 - **Groups:** inside a group (per effect type) the best positive value wins and the worst negative one still applies on top.
@@ -58,18 +63,35 @@ Add a test that the skill tree and tiers exist (the registry integrity test does
 reads a stored id-to-boolean map: it accepts only a plain object, keeps only registry ids with boolean values, drops the rest
 and never throws.
 
+## The cards
+
+Session-only state (toggle overrides over the registry defaults, and the chosen sharpness color); nothing is stored yet.
+The chosen color belongs to the weapon it was chosen for (a new weapon starts at the top color) and falls back to the top
+color for good if the active bar no longer has it (Handicraft switched off).
+
+- **Damage card:** EFR (true value large, in-game value beside it, one decimal everywhere), one row per element or status
+  instance ("Effective element: Fire", "Effective status: Poison" with the note that a higher value means faster buildup, not
+  more damage), the breakdown (true raw, raw after buffs, affinity, crit factor, sharpness with its multipliers), the sharpness
+  selector, and the Weakness Exploit note when the flag is set. Multipliers show their exact digits (x1.075). A result that
+  is not available shows its reason and the true raw if it can be computed.
+- **Buffs card:** an "Attack" section with Skills (the ones the build provides, named by the tier reached), Items, Songs
+  (Hunting Horn; the note says songs are not yet limited to the horn's notes) and Kinsect (Insect Glaive; the active combination
+  as text). "Reset buffs" returns every toggle to its default. A Defense section is added later next to Attack.
+- **Mobile summary:** EFR and EFE (the shown value of each instance, "Status " before a status value, " / " between two,
+  an en dash when unavailable) next to the defense total.
+
 ## Raw
 
 - `trueRaw = attack / classMultiplier`. The data's `attack` is the displayed value; it divides exactly for all 2324
   weapons (a test checks this in integer arithmetic).
 - Class multipliers: Switch Axe 5.4; Hammer and Hunting Horn 5.2; Great Sword 4.8; Charge Blade 3.6; Long Sword 3.3;
   Insect Glaive 3.1; Lance and Gunlance 2.3; Heavy Bowgun 1.5; Sword and Shield and Dual Blades 1.4; Light Bowgun 1.3; Bow 1.2.
-- `rawBeforeSong = trueRaw * rawPercent + rawFlat`.
+- `rawBeforeSong = trueRaw * rawPercent + rawFlat`. The card's "raw after buffs" is `rawBeforeSong * songRaw`.
 - `EFR = rawBeforeSong * songRaw * sharpnessRaw * critFactor`. The displayed value is `EFR * classMultiplier`.
 - Raw flat groups: Attack (tree 31: -20/-15/-10 give -20/-15/-10; 10/15/20/25 give +10/+15/+20/+25) and Edgemaster (tree 2,
-  10 points: +20) share one group; Powercharm +6 and Powertalon +9 (toggles, off by default); Challenger (tree 26: 10 points
+  10 points: +20) share one group; Powercharm +6 and Powertalon +9 (toggles, on by default); Challenger (tree 26: 10 points
   +10, 15 points +25) while "Raged monster" is on.
-- Kinsect (Insect Glaive only; Red, White, Orange toggles, default on): all three +25%; else Red + White +20%; else nothing.
+- Kinsect (Insect Glaive only; Red, White, Orange toggles, default on): all three ("Triple Up") +25%; else Red + White +20%; else nothing.
 - Horn songs (Hunting Horn only, encore always assumed): Attack Up S +15% and L +20% (best wins), Affinity Up +20 points, Element Up +20%.
 
 ## Affinity and crit

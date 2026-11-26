@@ -9,6 +9,7 @@ import { summarizeIssues } from '@/lib/charms'
 import { hunterTypeOfClass } from '@/lib/weaponClass'
 import { capacityOf, decosOf, findArmor, findDeco, resolveWeapon, type Target } from '@/state/build'
 import { useBuild } from '@/state/useBuild'
+import { useDamageControls } from '@/state/useDamageControls'
 import { MaterialsPanel } from '@/components/materials/MaterialsPanel'
 import { EquipmentPanel } from './EquipmentPanel'
 import { Rise } from './Rise'
@@ -35,6 +36,7 @@ export function Builder({
   manageRequest: number
 }) {
   const b = useBuild(data)
+  const dmg = useDamageControls(b)
   const [armorPick, setArmorPick] = useState<{ slot: ArmorSlot; open: boolean } | null>(null)
   const [decoPick, setDecoPick] = useState<{ key: CardKey; target: DecoTarget; open: boolean } | null>(null)
   // `session` is the React key: every open mounts a fresh picker that starts from the current weapon.
@@ -87,6 +89,7 @@ export function Builder({
             <Rise delay={50}>
               <EquipmentPanel
                 b={b}
+                dmg={dmg}
                 onPick={(slot) => setArmorPick({ slot, open: true })}
                 onAddDeco={openDecoPicker}
                 onPickWeapon={() => setWeaponPick((p) => ({ open: true, session: p.session + 1 }))}
@@ -102,7 +105,7 @@ export function Builder({
           </TabsContent>
           <TabsContent value="stats" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:col-start-3 lg:row-span-2 lg:row-start-1`}>
             <Rise delay={100}>
-              <StatsPanels b={b} />
+              <StatsPanels b={b} dmg={dmg} />
             </Rise>
           </TabsContent>
         </div>

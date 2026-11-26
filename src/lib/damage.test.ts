@@ -27,9 +27,10 @@ const SONG_L = 'song:attack-l'
 const SONG_AFF = 'song:affinity'
 const SONG_ELE = 'song:element'
 
-/** Everything off except the buff ids in `on`, so a test turns on only what it checks. */
+/** Skills on (they only act when the build has the skill), everything else off except the buff ids in `on`. */
+const BASE = Object.fromEntries(Object.keys(defaultToggles()).map((k) => [k, k.startsWith('skill:') && k !== RAGED]))
 const calc = (weapon: Weapon, skills: SkillTotals = {}, on: string[] = [], sharpnessColor?: number) => {
-  const toggles = { ...Object.fromEntries(Object.keys(defaultToggles()).map((k) => [k, false])), ...Object.fromEntries(on.map((k) => [k, true])) }
+  const toggles = { ...BASE, ...Object.fromEntries(on.map((k) => [k, true])) }
   const r = calculateDamage({ weapon, skills, toggles, sharpnessColor })
   if (!r.ok) throw new Error(r.reason)
   return r
@@ -276,7 +277,7 @@ describe('sharpness', () => {
 })
 
 describe('unavailable results and flags', () => {
-  const OFF = Object.fromEntries(Object.keys(defaultToggles()).map((k) => [k, false]))
+  const OFF = BASE
   it('gunners, missing sharpness, unknown class', () => {
     const bow = calculateDamage({ weapon: mkWeapon(1, 0, { class: 'Bow', attack: 120 }), skills: {}, toggles: OFF })
     expect(bow).toMatchObject({ ok: false, trueRaw: 100, reason: expect.stringContaining('Gunner') })

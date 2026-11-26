@@ -1,5 +1,8 @@
+import { BuffsCard } from '@/components/damage/BuffsCard'
+import { DamageCard } from '@/components/damage/DamageCard'
 import { FORMULA_TEXT, breakdownParts, defenseView, formatPercent, formatSigned } from '@/lib/defenseView'
 import { cn } from '@/lib/utils'
+import type { DamageState } from '@/state/useDamageControls'
 import type { useBuild } from '@/state/useBuild'
 import { Section } from './Section'
 import { Segmented } from './Segmented'
@@ -74,13 +77,12 @@ function DefenseSection({ b }: { b: Build }) {
   )
 }
 
-export function StatsPanels({ b }: { b: Build }) {
+export function StatsPanels({ b, dmg }: { b: Build; dmg: DamageState }) {
   return (
     <div className="space-y-4">
+      <DamageCard dmg={dmg} />
       <DefenseSection b={b} />
-      <Section title="Damage">
-        <p className="text-sm text-muted-foreground">Equip a weapon to see effective raw and element.</p>
-      </Section>
+      <BuffsCard dmg={dmg} />
     </div>
   )
 }

@@ -91,8 +91,9 @@ describe('registry integrity', () => {
     ).toEqual(['Attack', 'Edgemaster', 'Spirit', 'Expert', 'Brutality', 'Elemental', 'Amplify', 'Arcana', 'FreeElemnt', 'Handicraft', 'Tenderizer', 'Status'])
   })
 
-  it('defaults: items off, challenger, songs and kinsect on; combinations have no toggle', () => {
-    expect(DEFAULT_TOGGLES).toMatchObject({ 'item:powercharm': false, 'item:powertalon': false, 'skill:challenger': true, 'song:attack-l': true, 'kinsect:orange': true })
+  it('defaults: Powercharm, Powertalon, every skill, songs and kinsect on; combinations have no toggle', () => {
+    expect(DEFAULT_TOGGLES).toMatchObject({ 'item:powercharm': true, 'item:powertalon': true, 'skill:challenger': true, 'song:attack-l': true, 'kinsect:orange': true })
+    for (const b of BUFFS.filter((x) => x.skill)) expect(DEFAULT_TOGGLES[b.id], b.id).toBe(true)
     expect(Object.keys(DEFAULT_TOGGLES)).not.toContain('kinsect:triple')
     expect(DEFAULT_TOGGLES).toEqual(defaultToggles())
   })
@@ -108,7 +109,7 @@ describe('adding a buff needs no formula change', () => {
   }
   const gs = real(5014)
   const run = (registry: readonly Buff[], on: Record<string, boolean>) => {
-    const r = calculateDamage({ weapon: gs, skills: {}, toggles: { ...defaultToggles(registry), ...on } }, registry)
+    const r = calculateDamage({ weapon: gs, skills: {}, toggles: { ...defaultToggles(registry), 'item:powercharm': false, 'item:powertalon': false, ...on } }, registry)
     if (!r.ok) throw new Error(r.reason)
     return r
   }
@@ -126,7 +127,7 @@ describe('adding a buff needs no formula change', () => {
   it('a new buff in an existing group takes part in the best-wins rule', () => {
     const registry = [...BUFFS, { ...extra, effects: [{ type: 'rawFlat', group: 'raw-flat:attack', value: 30 }] } as Buff]
     expect(run(registry, { 'item:test-flat': true }).rawBeforeSong).toBe(270)
-    const r = calculateDamage({ weapon: gs, skills: { 31: 20 }, toggles: { ...defaultToggles(registry), 'item:test-flat': true } }, registry)
+    const r = calculateDamage({ weapon: gs, skills: { 31: 20 }, toggles: { ...defaultToggles(registry), 'item:powercharm': false, 'item:powertalon': false, 'item:test-flat': true } }, registry)
     expect(r.ok && r.rawBeforeSong).toBe(270) // best of +20 and +30, not +50
   })
 })
@@ -176,8 +177,8 @@ describe('listToggles', () => {
     expect(listToggles(gs, { 26: 9 }).map((g) => g.source)).toEqual(['item'])
     const withChallenger = listToggles(gs, { 26: 10 })
     expect(withChallenger.map((g) => g.source)).toEqual(['skill', 'item'])
-    expect(withChallenger[0].buffs).toEqual([{ id: 'skill:challenger', label: 'Challenger', condition: 'Raged monster', default: true }])
-    expect(withChallenger[1].buffs.map((b) => b.default)).toEqual([false, false])
+    expect(withChallenger[0].buffs).toEqual([{ id: 'skill:challenger', label: 'Challenger', condition: 'raged monster', default: true }])
+    expect(withChallenger[1].buffs.map((b) => b.default)).toEqual([true, true])
   })
 
   it('Hunting Horn: items and the four songs', () => {

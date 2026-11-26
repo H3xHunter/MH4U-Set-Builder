@@ -3,6 +3,9 @@
  * SOURCE: every number comes from the project owner's in-game knowledge of MH4U (docs/damage-model.md), not from the
  * database. Do not "correct" a value without the owner.
  *
+ * Every skill buff has a toggle (default on) so a skill can be switched off in the calculation only. Powercharm and
+ * Powertalon default on (players always carry them); other items would default off.
+ *
  * IDS ARE A STORAGE FORMAT: toggle states will be saved by buff id. NEVER rename or reuse an id; to retire a buff,
  * delete the entry and leave its id unused. Ids match /^[a-z0-9:_.-]{1,64}$/.
  */
@@ -82,6 +85,7 @@ const eleAtk = (id: string, tree: number, element: string): Buff => ({
   label: `${element} Atk`,
   source: 'skill',
   skill: { tree, tiers: [-10, 10, 15, 20] },
+  toggle: { default: true },
   effects: [
     { type: 'elementMult', group: `ele-atk:${element}`, element, value: { 10: 5, 15: 10, 20: 15 } },
     { type: 'elementFlat', group: `ele-atk:${element}`, element, value: { 10: 40, 15: 60, 20: 90 } },
@@ -95,6 +99,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Attack',
     source: 'skill',
     skill: { tree: 31, tiers: [-20, -15, -10, 10, 15, 20, 25] },
+    toggle: { default: true },
     effects: [{ type: 'rawFlat', group: 'raw-flat:attack', value: { 10: 10, 15: 15, 20: 20, 25: 25 } }],
   },
   {
@@ -102,6 +107,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Edgemaster (Honed Blade)',
     source: 'skill',
     skill: { tree: 2, tiers: [10] },
+    toggle: { default: true },
     effects: [
       { type: 'rawFlat', group: 'raw-flat:attack', value: { 10: 20 } },
       { type: 'sharpnessPlus', group: 'sharpness-plus' },
@@ -112,6 +118,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Handicraft (Sharpness +1)',
     source: 'skill',
     skill: { tree: 19, tiers: [10] },
+    toggle: { default: true },
     effects: [{ type: 'sharpnessPlus', group: 'sharpness-plus' }],
   },
   {
@@ -119,7 +126,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Challenger',
     source: 'skill',
     skill: { tree: 26, tiers: [10, 15] },
-    toggle: { default: true, condition: 'Raged monster' },
+    toggle: { default: true, condition: 'raged monster' },
     effects: [
       { type: 'rawFlat', group: 'raw-flat:challenger', value: { 10: 10, 15: 25 } },
       { type: 'affinityAdd', group: 'aff:challenger', value: { 10: 10, 15: 20 } },
@@ -131,6 +138,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Critical Eye (Expert)',
     source: 'skill',
     skill: { tree: 37, tiers: [-20, -15, -10, 10, 15, 20, 30] },
+    toggle: { default: true },
     effects: [{ type: 'affinityAdd', group: 'aff:crit', value: { 10: 10, 15: 15, 20: 20, 30: 30 } }],
   },
   {
@@ -138,6 +146,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Ruthlessness (Brutality)',
     source: 'skill',
     skill: { tree: 10, tiers: [10] },
+    toggle: { default: true },
     effects: [
       { type: 'affinityAdd', group: 'aff:crit', value: { 10: 15 } },
       { type: 'weaknessExploit', group: 'weakness-exploit' },
@@ -148,6 +157,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Weakness Exploit (Tenderizer)',
     source: 'skill',
     skill: { tree: 29, tiers: [10] },
+    toggle: { default: true },
     effects: [{ type: 'weaknessExploit', group: 'weakness-exploit' }],
   },
   // Skills: element and status
@@ -156,6 +166,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Element Atk (Elemental)',
     source: 'skill',
     skill: { tree: 84, tiers: [-10, 10] },
+    toggle: { default: true },
     effects: [{ type: 'elementPercent', group: 'ele-pct', value: { 10: 10 } }],
   },
   {
@@ -163,6 +174,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Elementality (Amplify)',
     source: 'skill',
     skill: { tree: 14, tiers: [10] },
+    toggle: { default: true },
     effects: [{ type: 'elementPercent', group: 'ele-pct', value: { 10: 10 } }],
   },
   {
@@ -170,6 +182,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Enlightened Blade (Arcana)',
     source: 'skill',
     skill: { tree: 140, tiers: [10] },
+    toggle: { default: true },
     effects: [
       { type: 'elementPercent', group: 'ele-pct', value: { 10: 10 } },
       { type: 'statusPercent', group: 'status-pct', value: { 10: 10 } },
@@ -181,6 +194,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Awaken',
     source: 'skill',
     skill: { tree: 17, tiers: [10] },
+    toggle: { default: true },
     effects: [{ type: 'awaken', group: 'awaken' }],
   },
   {
@@ -188,6 +202,7 @@ export const BUFFS: readonly Buff[] = [
     label: 'Status Atk (Status)',
     source: 'skill',
     skill: { tree: 48, tiers: [-10, 10, 15] },
+    toggle: { default: true },
     effects: [{ type: 'statusPercent', group: 'status-pct', value: { 10: 12.5, 15: 25 } }],
   },
   eleAtk('fire-atk', 79, 'Fire'),
@@ -201,14 +216,14 @@ export const BUFFS: readonly Buff[] = [
     id: 'item:powercharm',
     label: 'Powercharm',
     source: 'item',
-    toggle: { default: false },
+    toggle: { default: true },
     effects: [{ type: 'rawFlat', group: 'raw-flat:powercharm', value: 6 }],
   },
   {
     id: 'item:powertalon',
     label: 'Powertalon',
     source: 'item',
-    toggle: { default: false },
+    toggle: { default: true },
     effects: [{ type: 'rawFlat', group: 'raw-flat:powertalon', value: 9 }],
   },
 
@@ -259,7 +274,7 @@ export const BUFFS: readonly Buff[] = [
   },
   {
     id: 'kinsect:triple',
-    label: 'Red + White + Orange',
+    label: 'Triple Up',
     source: 'kinsect',
     classes: GLAIVE,
     effects: [{ type: 'rawPercent', group: 'raw-pct:kinsect', value: 25, needs: ['kinsect:red', 'kinsect:white', 'kinsect:orange'] }],
