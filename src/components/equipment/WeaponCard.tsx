@@ -77,7 +77,7 @@ export function WeaponCard({ weapon, customSlots, ...p }: Props) {
               <span className="font-mono text-foreground">{formatAffinity(weapon)}</span>
             </p>
             {isDoubleAffinity(weapon) && (
-              <p className="text-xs text-muted-foreground">Two possible values; damage treats this as 0%.</p>
+              <p className="text-xs text-muted-foreground">Two possible values; damage uses their average.</p>
             )}
             {elementParts(weapon).length > 0 && (
               <div className="flex flex-wrap gap-1.5">

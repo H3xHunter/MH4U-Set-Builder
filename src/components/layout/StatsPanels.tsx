@@ -81,9 +81,6 @@ export function StatsPanels({ b }: { b: Build }) {
       <Section title="Damage">
         <p className="text-sm text-muted-foreground">Equip a weapon to see effective raw and element.</p>
       </Section>
-      <Section title="Monsters">
-        <p className="text-sm text-muted-foreground">Monster information will be listed here.</p>
-      </Section>
     </div>
   )
 }

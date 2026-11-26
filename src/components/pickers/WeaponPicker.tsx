@@ -24,7 +24,7 @@ import {
 import type { WeaponSelection } from '@/state/build'
 import { keyHint } from './pickerStyles'
 
-const DOUBLE_TITLE = 'Two possible values. Damage treats this as 0% affinity.'
+const DOUBLE_TITLE = 'Two possible values. Damage uses their average.'
 const COLS = 'md:grid md:grid-cols-[minmax(0,1fr)_56px_120px_150px_64px] md:items-center md:gap-3'
 const knownClass = (c: string): c is WeaponClass => (WEAPON_CLASSES as readonly string[]).includes(c)
 const hunterName = (h: PlayStyle) => (h === 'blade' ? 'Blademaster' : 'Gunner')
