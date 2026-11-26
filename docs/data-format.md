@@ -48,7 +48,7 @@ decorations). The converter fails if `icon_name` does not match the pattern or t
 
 ## weapons.json
 `[{id, name, class, parentId, final, rarity, attack, maxAttack, affinity, affinityOptions, element, element2,
-awaken, defenseBonus, sharpness, slots, hornNotes, extra}]`
+awaken, defenseBonus, sharpness, slots, hornNotes, creationCost, upgradeCost, materials, requiresWeapon, extra}]`
 - `class`: source sub_type (e.g. "Great Sword", "Sword and Shield", "Light Bowgun").
 - `parentId`: previous weapon in the upgrade tree, or null (the source uses 0 for "none"; ids start at 1).
 - `final`: boolean. `attack`: integer. `maxAttack`: number | null (null for all weapons in the current data). Both as stored; whether they equal in-game displayed attack is unverified.
@@ -66,6 +66,39 @@ awaken, defenseBonus, sharpness, slots, hornNotes, extra}]`
   format (warning; currently weapon 7324 "Emperor's Speech", whose second group has 8 values). The unit of the
   segments is unverified.
 - `slots`: decoration capacity. `hornNotes`: note string like "PBR", else null.
+- `creationCost`, `upgradeCost`: zenny to forge the weapon from scratch, and to upgrade it from its parent. Integer or
+  null. Null when the source column is blank or NULL (1696 and 412 weapons), never 0 as a stand-in. A stored 0 is kept
+  as 0 (15 weapons have `creationCost` 0: Rusted/Worn starter weapons, Demon's Isle, God's Isle; meaning unverified).
+  Source text that is not an integer becomes null with a warning (weapon 6808 Demonlord Cudgel, `upgradeCost`, the
+  source text means "variable materials"). A negative number fails the conversion.
+- `materials`: `[{itemId, quantity, kind}]` like armor, with `kind` `create | improve` only (the source has no other
+  kind for weapons; one would fail the conversion). `quantity` is a positive integer. `itemId` refers to
+  `materials.json`. `create` is the cost to forge the weapon, `improve` the cost to upgrade it from its parent, so a
+  weapon can have both (221 do). Lines are listed `create` first, then `improve`, each in source row order. A weapon
+  with no recipe has `[]` (3 weapons: 5575, 5963, 5965).
+  - **Parent ingredient rule.** In the source, the parent weapon appears as an ingredient (quantity 1) of the
+    recipe. Weapon item ids are the weapon ids (checked for all 1916 such rows). That ingredient is **not** a
+    material and is never listed in `materials`; the parent is `parentId`, and any weapon ingredient `parentId` does not
+    cover is in `requiresWeapon`. The converter checks it: an `improve`
+    recipe must have exactly one weapon ingredient and it must equal `parentId`. Where it does not, the converter
+    prints a warning. In the current source this happens for 13
+    weapons: 9 improve recipes with a `parentId` but no weapon ingredient (5026, 5121, 5465, 5566, 5954, 6171, 6349,
+    6717, 6916) and 4 whose weapon ingredient is a different weapon (5257 needs 5267, 5694 needs 5692, 7098 needs 7095,
+    7303 needs 7302 and has no parent). Whether those are real cross-tree requirements or source errors is unverified.
+    A `create` recipe may also list the parent (21 weapons, all equal to `parentId`); it is dropped the same way.
+  - Exact duplicate source rows (same weapon, item, kind, quantity) are kept once with a warning (weapons 5192, 5727,
+    6165); the same item and kind with different quantities fails the conversion. Whether a duplicate row means
+    "twice the quantity" is unverified.
+- `requiresWeapon`: `{create, improve}`, every weapon has it. Each value is a weapon id or null. It is the weapon-type
+  ingredient of that recipe kind, kept only when `parentId` does not already say it: always for `create`, and for
+  `improve` only when the id differs from `parentId`. A normal improve step (ingredient equals `parentId`) is null.
+  Current data: 21 `create` values (all equal `parentId`; none of these weapons is a root, and they have only create
+  lines, so "create" there means forging directly from the parent) and 4 `improve` values (5257 needs 5267, 5694 needs
+  5692, 7098 needs 7095, 7303 needs 7302 and has no `parentId`). The 9 improve recipes with a `parentId` but no
+  weapon ingredient stay null on both. A recipe with more than one weapon ingredient is not guessed: it is null and
+  the converter warns (none in the current data). The converter also warns about any cycle among `parentId` and
+  `requiresWeapon` edges (none in the current data). A weapon that is its own parent, or requires itself, or requires
+  an unknown weapon id, fails the conversion. The parent-ingredient warnings listed above are unchanged.
 - `extra`: untouched text, null if blank: `shellingType, phial, charges, coatings, recoil, reloadSpeed, rapidFire,
   deviation, ammo, specialAmmo`. Not interpreted.
 
@@ -74,7 +107,8 @@ awaken, defenseBonus, sharpness, slots, hornNotes, extra}]`
 (matching rules unverified). No id (source `_id` is not exposed).
 
 ## materials.json
-Only items used as armor materials. `[{id, name, rarity, drops, gathering, sources}]`
+Only items used as armor or weapon recipe materials (every non-weapon item referenced by `armor[].materials` or
+`weapons[].materials`). `[{id, name, rarity, drops, gathering, sources}]`
 - `drops`: `[{monsterId, rank, condition, percentage, stackSize}]` from `hunting_rewards`; `rank` is `LR | HR | G`;
   `percentage` can be null (4 source rows are blank).
 - `gathering`: `[{locationId, area, site, rank, quantity, percentage}]`.
@@ -91,6 +125,7 @@ Only items used as armor materials. `[{id, name, rarity, drops, gathering, sourc
     is unverified; do not label it in the UI.** A row whose both sides are materials appears under both. `unlockQuestId`
     refers to `quests.json` (kind `quest`) or is null.
 - An item can still have no link at all (the converter reports how many).
+- An item that is a recipe material is only in `materials.json`, never also in `items.json`.
 
 ## quests.json
 Only quests referenced by `materials.sources` (reward quests, wyporium unlock quests, arena quests):
@@ -99,8 +134,8 @@ The two kinds have **separate id spaces**: identify a record by `(kind, id)`. Ar
 `stars` null (the source has no such columns). Sorted quests first, then arena, each by id.
 
 ## items.json
-Items referenced by `materials.sources` that are not themselves armor materials (combining ingredients, wyporium
-counterparts, veggie offer items): `[{id, name, type, rarity}]`. Armor materials are in `materials.json`.
+Items referenced by `materials.sources` that are not themselves recipe materials (combining ingredients, wyporium
+counterparts, veggie offer items): `[{id, name, type, rarity}]`. Recipe materials are in `materials.json`.
 
 ## monsters.json
 All monsters: `[{id, name, class, hitzones:[{part, cut, impact, shot, fire, water, ice, thunder, dragon, ko}]}]`.

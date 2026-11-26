@@ -64,6 +64,13 @@ export interface ArmorMaterial {
   kind: MaterialKind
 }
 
+/** A weapon recipe line. The parent weapon needed for an upgrade is never listed; see `Weapon.parentId`. */
+export interface WeaponMaterial {
+  itemId: number
+  quantity: number
+  kind: 'create' | 'improve'
+}
+
 export interface Armor {
   id: number
   name: string
@@ -113,6 +120,15 @@ export interface Weapon {
   sharpness: { base: SevenInts; plus: SevenInts } | null
   slots: number
   hornNotes: string | null
+  /** Zenny; null when the source has none. */
+  creationCost: number | null
+  upgradeCost: number | null
+  materials: WeaponMaterial[]
+  /**
+   * The weapon needed for each recipe kind, when `parentId` does not already say it: every create one, and an
+   * improve one that differs from parentId. Otherwise null.
+   */
+  requiresWeapon: { create: number | null; improve: number | null }
   extra: Record<
     | 'shellingType'
     | 'phial'

@@ -22,6 +22,7 @@ import {
   type SkillTree,
   type Weapon,
   type WeaponElement,
+  type WeaponMaterial,
 } from './types'
 
 export class DataValidationError extends Error {
@@ -210,6 +211,29 @@ const EXTRA_KEYS = [
   'specialAmmo',
 ] as const
 
+const WEAPON_KINDS = ['create', 'improve'] as const
+
+const weaponMaterials: Check<WeaponMaterial[]> = (v, p) => {
+  const lines = arrOf<WeaponMaterial>((m, mp) => {
+    const mo = obj(m, mp)
+    const quantity = field(mo, mp, 'quantity', int)
+    if (quantity <= 0) fail(dot(mp, 'quantity'), 'expected a positive integer')
+    return { itemId: field(mo, mp, 'itemId', int), quantity, kind: field(mo, mp, 'kind', oneOf(WEAPON_KINDS)) }
+  })(v, p)
+  const seen = new Set<string>()
+  lines.forEach((l, i) => {
+    const k = `${l.kind}:${l.itemId}`
+    if (seen.has(k)) fail(dot(at(p, i), 'itemId'), `duplicate ${l.kind} line for item ${l.itemId}`)
+    seen.add(k)
+  })
+  return lines
+}
+
+const cost: Check<number | null> = (v, p) => {
+  const n = nullable(int)(v, p)
+  return n !== null && n < 0 ? fail(p, 'expected a non-negative integer') : n
+}
+
 const validateWeapon: Check<Weapon> = (v, p) => {
   const o = obj(v, p)
   const affinity = field(o, p, 'affinity', nullable(int))
@@ -254,6 +278,13 @@ const validateWeapon: Check<Weapon> = (v, p) => {
     ),
     slots: field(o, p, 'slots', intIn(0, 3)),
     hornNotes: field(o, p, 'hornNotes', nullable(str)),
+    creationCost: field(o, p, 'creationCost', cost),
+    upgradeCost: field(o, p, 'upgradeCost', cost),
+    materials: field(o, p, 'materials', weaponMaterials),
+    requiresWeapon: field(o, p, 'requiresWeapon', (rv, rp) => {
+      const ro = obj(rv, rp)
+      return { create: field(ro, rp, 'create', nullable(int)), improve: field(ro, rp, 'improve', nullable(int)) }
+    }),
     extra: extra as Weapon['extra'],
   }
 }
@@ -482,7 +513,17 @@ function checkRefs(d: GameData): void {
   })
   d.decorations.forEach((x, i) => needTrees(x.skills, dot(at('decorations', i), 'skills')))
   d.weapons.forEach((w, i) => {
-    if (w.parentId !== null) need(weapons, w.parentId, dot(at('weapons', i), 'parentId'), 'weapon')
+    const p = at('weapons', i)
+    if (w.parentId !== null) need(weapons, w.parentId, dot(p, 'parentId'), 'weapon')
+    if (w.parentId === w.id) fail(dot(p, 'parentId'), 'a weapon cannot be its own parent')
+    for (const kind of ['create', 'improve'] as const) {
+      const rid = w.requiresWeapon[kind]
+      if (rid === null) continue
+      const rp = dot(dot(p, 'requiresWeapon'), kind)
+      need(weapons, rid, rp, 'weapon')
+      if (rid === w.id) fail(rp, 'a weapon cannot require itself')
+    }
+    w.materials.forEach((m, j) => need(materials, m.itemId, dot(at(dot(p, 'materials'), j), 'itemId'), 'material item'))
   })
   d.materials.forEach((m, i) => {
     const p = at('materials', i)
