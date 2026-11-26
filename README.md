@@ -6,7 +6,7 @@ A free, in-browser set builder for **Monster Hunter 4 Ultimate** (3DS). Pick a w
 
 No download, no account, no install. Everything runs in your browser.
 
-> **Status:** early development. The site currently shows a placeholder while the builder is being built.
+> **Status:** in development.
 
 ## Features
 
@@ -15,7 +15,7 @@ No download, no account, no install. Everything runs in your browser.
 - Create and save your own charms, including slot-only charms with no skills
 - Skills table showing base points, points added by decorations, totals, and the active skill level, including negative skills
 - Defense and elemental resistances, with a normal/max armor level toggle
-- For each armor piece: the materials to craft it and the monsters they come from
+- Materials for your armor and weapon, and where each material comes from
 - Torso Up handled correctly
 - Planned: damage estimates (effective raw and effective element) for blademaster weapons first, then gunners
 

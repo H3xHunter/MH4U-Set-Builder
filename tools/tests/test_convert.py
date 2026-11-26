@@ -22,7 +22,8 @@ create table components(_id integer primary key, created_item_id int, component_
 create table weapons(_id integer primary key, parent_id int, wtype text, attack int, max_attack, element text,
   element_attack, element_2 text, element_2_attack, awaken text, awaken_attack, defense int, sharpness text,
   affinity text, horn_notes text, shelling_type text, phial text, charges text, coatings text, recoil text,
-  reload_speed text, rapid_fire text, deviation text, ammo text, special_ammo text, num_slots int, tree_depth int, final int);
+  reload_speed text, rapid_fire text, deviation text, ammo text, special_ammo text, num_slots int, tree_depth int, final int,
+  creation_cost, upgrade_cost);
 create table horn_melodies(_id integer primary key, notes text, song text, effect1 text, effect2 text, duration text, extension text);
 create table hunting_rewards(_id integer primary key, item_id int, condition text, monster_id int, rank text, stack_size int, percentage);
 create table gathering(_id integer primary key, item_id int, location_id int, area text, site text, rank text, quantity, percentage);
@@ -79,7 +80,10 @@ def make_db(path, mutate=None):
     c.execute("insert into veggie_elder(location_id,offer_item_id,receive_item_id,quantity) values(5,52,11,3)")
     c.executemany("insert into wyporium(item_in_id,item_out_id,unlock_quest_id) values(?,?,?)",
                   [(11, 10, 1), (53, 11, 1), (12, 12, 1)])
-    c.executemany("insert into weapons values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", [
+    c.executemany("insert into weapons(_id,parent_id,wtype,attack,max_attack,element,element_attack,element_2,element_2_attack,"
+                  "awaken,awaken_attack,defense,sharpness,affinity,horn_notes,shelling_type,phial,charges,coatings,recoil,"
+                  "reload_speed,rapid_fire,deviation,ammo,special_ammo,num_slots,tree_depth,final) "
+                  "values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", [
         (40, None, "Great Sword", 1248, "", "Fire", 300, "", "", "Ice", 410, 40, SHARP, "10", "", "", "", "", "", "", "", "", "", "", "", 3, 9, 1),
         (41, 0, "Great Sword", 100, "", "", "", "", "", "", "", 0, SHARP, "", "", "", "", "", "", "", "", "", "", "", "", 2, 1, 0),
         (42, 40, "Great Sword", 100, 120, "", "", "", "", "", "", 0, "", "-45/20", "", "", "", "", "", "", "", "", "", "", "", 0, 1, 0),
@@ -342,6 +346,209 @@ class ConvertTests(Base):
         self.assertEqual((m["dataVersion"], m["sourceCommit"], len(m["dbSha256"])), (1, "abc", 64))
         self.assertEqual(m["counts"]["armor"], 4)
         self.assertNotIn("generatedAt", m)
+
+
+def add_recipes(c):
+    """Weapons 41-43 get recipes; 40, 44 get none. New materials 60 and 61 are used only by weapons."""
+    c.executemany("insert into items(_id,name,type,rarity) values(?,?,?,?)", [(60, "Weapon Ore", "Ore", 1), (61, "Weapon Fang", "Flesh", 2)])
+    c.executemany("insert into components(created_item_id,component_item_id,quantity,type) values(?,?,?,?)", [
+        (41, 60, 3, "Create"),
+        (42, 40, 1, "Improve"), (42, 60, 2, "Improve"), (42, 61, 1, "Improve"),
+        (43, 40, 1, "Create"), (43, 61, 4, "Create"), (43, 40, 1, "Improve"), (43, 60, 1, "Improve")])
+    c.execute("update weapons set creation_cost='750', upgrade_cost='' where _id=41")
+    c.execute("update weapons set creation_cost='', upgrade_cost=1200 where _id=42")
+    c.execute("update weapons set creation_cost=0 where _id=44")
+
+
+# A slice of the real Great Sword tree (ids and lines as stored in the source database).
+def add_real_slice(c):
+    c.executemany("insert into items(_id,name,type,sub_type,rarity) values(?,?,?,?,?)", [
+        (n, name, "Ore", "", 1) for n, name in ((203, "Iron Ore"), (205, "Machalite Ore"), (206, "Dragonite Ore"),
+        (207, "Lightcrystal"), (209, "Firestone"), (210, "Gossamite Ore"), (213, "Carbalite Ore"), (266, "Hercudrome"))] + [
+        (n, name, "Weapon", "Great Sword", 1) for n, name in ((5001, "Iron Sword"), (5005, "Ravager Blade"),
+        (5006, "Ravager Blade+"), (5007, "Lacerator Blade"))])
+    c.executemany("insert into weapons(_id,parent_id,wtype,attack,num_slots,tree_depth,final,affinity,creation_cost,upgrade_cost) "
+                  "values(?,?,?,?,?,?,?,?,?,?)", [
+        (5001, 0, "Great Sword", 288, 0, 0, 0, "", 750, ""), (5005, 5001, "Great Sword", 300, 0, 4, 0, "", "", 1000),
+        (5006, 5005, "Great Sword", 500, 0, 5, 0, "", 9525, 6350), (5007, 5006, "Great Sword", 720, 2, 6, 0, "", "", 20000)])
+    c.executemany("insert into components(created_item_id,component_item_id,quantity,type) values(?,?,?,?)", [
+        (5001, 203, 3, "Create"),
+        (5005, 5001, 1, "Improve"), (5005, 203, 1, "Improve"),
+        (5006, 209, 3, "Create"), (5006, 206, 15, "Create"), (5006, 205, 10, "Create"),
+        (5006, 5005, 1, "Improve"), (5006, 209, 2, "Improve"), (5006, 206, 10, "Improve"), (5006, 210, 2, "Improve"),
+        (5007, 5006, 1, "Improve"), (5007, 213, 5, "Improve"), (5007, 207, 4, "Improve"), (5007, 266, 3, "Improve")])
+
+
+class WeaponRecipeTests(Base):
+    def lines(self, d, wid):
+        return {w["id"]: w for w in d["weapons"]}[wid]["materials"]
+
+    def test_lines_exclude_parent_and_keep_both_kinds(self):
+        d = self.run_convert(add_recipes)
+        self.assertEqual(self.lines(d, 41), [{"itemId": 60, "quantity": 3, "kind": "create"}])
+        self.assertEqual(self.lines(d, 42), [{"itemId": 60, "quantity": 2, "kind": "improve"},
+                                             {"itemId": 61, "quantity": 1, "kind": "improve"}])  # parent 40 not listed
+        self.assertEqual(self.lines(d, 43), [{"itemId": 61, "quantity": 4, "kind": "create"},
+                                             {"itemId": 60, "quantity": 1, "kind": "improve"}])
+        self.assertEqual((self.lines(d, 40), self.lines(d, 44)), ([], []))
+        self.assertEqual({m["kind"] for w in d["weapons"] for m in w["materials"]}, {"create", "improve"})
+        ids = {w["id"] for w in d["weapons"]}
+        self.assertFalse(any(m["itemId"] in ids for w in d["weapons"] for m in w["materials"]))
+        self.assertEqual([w for w in self.warnings if "weapon ingredient" in w], [])  # parents all match
+        self.assertEqual(sum(1 for w in d["weapons"] if w["materials"]), 3)
+        self.assertEqual(sum(len(w["materials"]) for w in d["weapons"]), 5)
+
+    def test_requires_weapon(self):
+        d = self.run_convert(add_recipes)
+        by = {w["id"]: w for w in d["weapons"]}
+        none = {"create": None, "improve": None}
+        self.assertTrue(all(set(w["requiresWeapon"]) == {"create", "improve"} for w in d["weapons"]))
+        self.assertEqual(by[43]["requiresWeapon"], {"create": 40, "improve": None})  # create keeps the parent; improve == parentId -> null
+        self.assertEqual(by[42]["requiresWeapon"], none)  # normal improve
+        self.assertEqual((by[40]["requiresWeapon"], by[41]["requiresWeapon"], by[44]["requiresWeapon"]), (none, none, none))
+
+    def test_requires_weapon_different_from_parent_and_no_parent(self):
+        def other(c):
+            add_recipes(c)
+            c.execute("update components set component_item_id=44 where created_item_id=42 and component_item_id=40")
+            c.execute("insert into components(created_item_id,component_item_id,quantity,type) values(41,44,1,'Improve')")
+        d = self.run_convert(other)
+        by = {w["id"]: w for w in d["weapons"]}
+        self.assertEqual(by[42]["requiresWeapon"], {"create": None, "improve": 44})  # differs from parentId 40
+        self.assertEqual((by[41]["parentId"], by[41]["requiresWeapon"]), (None, {"create": None, "improve": 44}))  # no parent
+        self.assertFalse(any(m["itemId"] == 44 for w in d["weapons"] for m in w["materials"]))
+        self.assertTrue(any("weapon 42" in w and "does not match parentId 40" in w for w in self.warnings))  # warning kept
+
+    def test_requires_weapon_missing_or_ambiguous_stays_null(self):
+        def no_parent(c):
+            add_recipes(c)
+            c.execute("delete from components where created_item_id=42 and component_item_id=40")
+        d = self.run_convert(no_parent)
+        self.assertEqual({w["id"]: w for w in d["weapons"]}[42]["requiresWeapon"], {"create": None, "improve": None})
+        self.assertTrue(any("weapon 42" in w and "none does not match" in w for w in self.warnings))
+        self.tmp = Path(tempfile.mkdtemp(dir=self.tmp))
+        def two(c):
+            add_recipes(c)
+            c.execute("insert into components(created_item_id,component_item_id,quantity,type) values(42,44,1,'Improve')")
+        d = self.run_convert(two)
+        self.assertEqual({w["id"]: w for w in d["weapons"]}[42]["requiresWeapon"], {"create": None, "improve": None})
+        self.assertTrue(any("2 weapon ingredients" in w for w in self.warnings))
+
+    def test_requires_weapon_cycles_and_self_references(self):
+        def cycle(c):
+            add_recipes(c)
+            c.execute("update weapons set parent_id=43 where _id=40")  # 40 -> 43 -> 40 via parentId
+        d = self.run_convert(cycle)
+        self.assertTrue(any("prerequisite cycle" in w and "40" in w and "43" in w for w in self.warnings))
+        self.assertIsNotNone(d)  # a cycle is reported, not fatal
+        files = json.loads(json.dumps(d))
+        files.pop("meta")
+        for mutate in (lambda f: f["weapons"][0]["requiresWeapon"].update({"create": f["weapons"][0]["id"]}),
+                       lambda f: f["weapons"][0]["requiresWeapon"].update({"improve": 99999}),
+                       lambda f: f["weapons"][0].update({"parentId": f["weapons"][0]["id"]})):
+            bad = json.loads(json.dumps(files))
+            mutate(bad)
+            with self.assertRaises(convert.ConvertError):
+                convert.check_integrity(bad)
+        self.tmp = Path(tempfile.mkdtemp(dir=self.tmp))
+        self.run_convert(add_recipes)
+        self.assertFalse(any("cycle" in w for w in self.warnings))
+
+    def test_costs(self):
+        d = self.run_convert(add_recipes)
+        by = {w["id"]: w for w in d["weapons"]}
+        self.assertEqual((by[41]["creationCost"], by[41]["upgradeCost"]), (750, None))  # '' -> null, text int -> int
+        self.assertEqual((by[42]["creationCost"], by[42]["upgradeCost"]), (None, 1200))
+        self.assertEqual(by[44]["creationCost"], 0)  # a stored 0 is kept as 0
+        self.assertEqual((by[40]["creationCost"], by[40]["upgradeCost"]), (None, None))  # column is NULL
+
+    def test_bad_costs(self):
+        with self.assertRaises(convert.ConvertError):
+            self.run_convert(lambda c: c.execute("update weapons set creation_cost=-5 where _id=41"))
+        self.tmp = Path(tempfile.mkdtemp(dir=self.tmp))
+        d = self.run_convert(lambda c: c.execute("update weapons set upgrade_cost='(varies' where _id=41"))
+        self.assertIsNone({w["id"]: w for w in d["weapons"]}[41]["upgradeCost"])
+        self.assertTrue(any("weapon 41" in w and "upgrade_cost" in w for w in self.warnings))
+
+    def test_new_materials_and_no_dangling_references(self):
+        d = self.run_convert(add_recipes)
+        m = {x["id"]: x for x in d["materials"]}
+        self.assertEqual(sorted(m), [10, 11, 12, 13, 60, 61])  # 60, 61 only used by weapons
+        self.assertEqual(set(m[60]["sources"]), {"quests", "arena", "combining", "veggieElder", "wyporium"})
+        self.assertNotIn(60, [i["id"] for i in d["items"]])
+        files = dict(d)
+        files.pop("meta")
+        convert.check_integrity(files)
+        bad = json.loads(json.dumps(files))
+        bad["weapons"][1]["materials"].append({"itemId": 999, "quantity": 1, "kind": "create"})
+        with self.assertRaises(convert.ConvertError):
+            convert.check_integrity(bad)
+
+    def test_parent_mismatch_is_flagged_not_guessed(self):
+        def other_weapon(c):
+            add_recipes(c)
+            c.execute("update components set component_item_id=44 where created_item_id=42 and component_item_id=40")
+        d = self.run_convert(other_weapon)
+        self.assertTrue(any("weapon 42" in w and "[44] does not match parentId 40" in w for w in self.warnings))
+        self.assertFalse(any(m["itemId"] == 44 for m in self.lines(d, 42)))
+
+        self.tmp = Path(tempfile.mkdtemp(dir=self.tmp))
+        def no_parent(c):
+            add_recipes(c)
+            c.execute("delete from components where created_item_id=42 and component_item_id=40")
+        self.run_convert(no_parent)
+        self.assertTrue(any("weapon 42" in w and "none does not match parentId 40" in w for w in self.warnings))
+
+        self.tmp = Path(tempfile.mkdtemp(dir=self.tmp))
+        def two(c):
+            add_recipes(c)
+            c.execute("insert into components(created_item_id,component_item_id,quantity,type) values(42,44,1,'Improve')")
+        self.run_convert(two)
+        self.assertTrue(any("weapon 42" in w and "2 weapon ingredients" in w for w in self.warnings))
+
+        self.tmp = Path(tempfile.mkdtemp(dir=self.tmp))
+        def create_other(c):
+            add_recipes(c)
+            c.execute("update components set component_item_id=44 where created_item_id=43 and type='Create' and component_item_id=40")
+        self.run_convert(create_other)
+        self.assertTrue(any("weapon 43" in w and "create weapon ingredient [44]" in w for w in self.warnings))
+
+    def test_duplicate_lines(self):
+        def dup(c):
+            add_recipes(c)
+            c.execute("insert into components(created_item_id,component_item_id,quantity,type) values(41,60,3,'Create')")
+        d = self.run_convert(dup)
+        self.assertEqual(self.lines(d, 41), [{"itemId": 60, "quantity": 3, "kind": "create"}])
+        self.assertTrue(any("weapon 41" in w and "duplicate create line" in w for w in self.warnings))
+        self.tmp = Path(tempfile.mkdtemp(dir=self.tmp))
+        with self.assertRaises(convert.ConvertError):
+            self.run_convert(lambda c: (add_recipes(c), c.execute(
+                "insert into components(created_item_id,component_item_id,quantity,type) values(41,60,5,'Create')")))
+
+    def test_bad_recipe_rows_fail(self):
+        for sql in ("insert into components(created_item_id,component_item_id,quantity,type) values(41,60,0,'Create')",
+                    "insert into components(created_item_id,component_item_id,quantity,type) values(41,61,-1,'Improve')",
+                    "insert into components(created_item_id,component_item_id,quantity,type) values(41,61,1,'Create A')",
+                    "insert into components(created_item_id,component_item_id,quantity,type) values(41,999,1,'Create')"):
+            with self.subTest(sql=sql):
+                self.tmp = Path(tempfile.mkdtemp(dir=self.tmp))
+                with self.assertRaises(convert.ConvertError):
+                    self.run_convert(lambda c, q=sql: (add_recipes(c), c.execute(q)))
+
+    def test_real_slice_end_to_end(self):
+        d = self.run_convert(add_real_slice)
+        by = {w["id"]: w for w in d["weapons"]}
+        line = lambda i, q, k: {"itemId": i, "quantity": q, "kind": k}
+        self.assertEqual(by[5007]["materials"], [line(213, 5, "improve"), line(207, 4, "improve"), line(266, 3, "improve")])
+        self.assertEqual((by[5007]["parentId"], by[5007]["creationCost"], by[5007]["upgradeCost"]), (5006, None, 20000))
+        self.assertEqual(by[5006]["materials"], [line(209, 3, "create"), line(206, 15, "create"), line(205, 10, "create"),
+                                                 line(209, 2, "improve"), line(206, 10, "improve"), line(210, 2, "improve")])
+        self.assertEqual((by[5006]["creationCost"], by[5006]["upgradeCost"]), (9525, 6350))
+        self.assertEqual(by[5001]["materials"], [line(203, 3, "create")])
+        self.assertEqual((by[5001]["parentId"], by[5001]["creationCost"], by[5001]["upgradeCost"]), (None, 750, None))
+        self.assertFalse([w for w in self.warnings if "weapon ingredient" in w])
+        self.assertTrue(all(by[i]["requiresWeapon"] == {"create": None, "improve": None} for i in (5001, 5005, 5006, 5007)))
+        self.assertTrue({203, 205, 206, 207, 209, 210, 213, 266} <= {m["id"] for m in d["materials"]})
 
 
 class CliTests(Base):

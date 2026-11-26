@@ -71,6 +71,10 @@ const indexOf = (data: GameData): Index => {
   return i
 }
 
+/** Memoized per data set (built once). */
+export const weaponsById = (data: GameData): ReadonlyMap<number, Weapon> => indexOf(data).weapons
+export const armorById = (data: GameData): ReadonlyMap<number, Armor> => indexOf(data).armor
+
 export const findArmor = (ctx: BuildContext, id: number) => indexOf(ctx.data).armor.get(id) ?? null
 export const findDeco = (ctx: BuildContext, id: number) => indexOf(ctx.data).decorations.get(id) ?? null
 

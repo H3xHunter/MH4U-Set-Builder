@@ -44,6 +44,10 @@ export const mkWeapon = (id: number, slots: number, over: Partial<Weapon> = {}):
   sharpness: null,
   slots,
   hornNotes: null,
+  creationCost: null,
+  upgradeCost: null,
+  materials: [],
+  requiresWeapon: { create: null, improve: null },
   extra: {
     shellingType: null,
     phial: null,

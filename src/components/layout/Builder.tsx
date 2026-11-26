@@ -9,6 +9,7 @@ import { summarizeIssues } from '@/lib/charms'
 import { hunterTypeOfClass } from '@/lib/weaponClass'
 import { capacityOf, decosOf, findArmor, findDeco, resolveWeapon, type Target } from '@/state/build'
 import { useBuild } from '@/state/useBuild'
+import { MaterialsPanel } from '@/components/materials/MaterialsPanel'
 import { EquipmentPanel } from './EquipmentPanel'
 import { Rise } from './Rise'
 import { PLAY_STYLES, Segmented, type PlayStyle } from './Segmented'
@@ -72,16 +73,17 @@ export function Builder({
         <TabsList className="w-full lg:hidden" aria-label="Panels">
           <TabsTrigger value="equipment">Equipment</TabsTrigger>
           <TabsTrigger value="skills">Skills</TabsTrigger>
+          <TabsTrigger value="materials">Materials</TabsTrigger>
           <TabsTrigger value="stats">Stats</TabsTrigger>
         </TabsList>
         <div className="lg:grid lg:grid-cols-[240px_minmax(0,1fr)_300px] lg:items-start lg:gap-4">
           {/* hidden={false}: Radix sets the hidden attribute on inactive panels, which would beat lg:block. */}
-          <TabsContent value="skills" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:order-1`}>
+          <TabsContent value="skills" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:col-start-1 lg:row-span-2 lg:row-start-1`}>
             <Rise delay={0}>
               <SkillsPanel b={b} />
             </Rise>
           </TabsContent>
-          <TabsContent value="equipment" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:order-2`}>
+          <TabsContent value="equipment" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:col-start-2 lg:row-start-1`}>
             <Rise delay={50}>
               <EquipmentPanel
                 b={b}
@@ -92,7 +94,13 @@ export function Builder({
               />
             </Rise>
           </TabsContent>
-          <TabsContent value="stats" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:order-3`}>
+          {/* Large screens: under Equipment in the wide middle column. Small screens: its own tab. */}
+          <TabsContent value="materials" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:col-start-2 lg:row-start-2`}>
+            <Rise delay={75}>
+              <MaterialsPanel b={b} />
+            </Rise>
+          </TabsContent>
+          <TabsContent value="stats" forceMount hidden={false} tabIndex={-1} className={`${tabContent} lg:col-start-3 lg:row-span-2 lg:row-start-1`}>
             <Rise delay={100}>
               <StatsPanels b={b} />
             </Rise>

@@ -74,7 +74,9 @@ function weapon(id: number, parentId: number | null) {
   return {
     id, name: 'W', class: 'Great Sword', parentId, final: false, rarity: 1, attack: 1, maxAttack: null,
     affinity: 0, affinityOptions: null, element: null, element2: null, awaken: null, defenseBonus: 0,
-    sharpness: null, slots: 0, hornNotes: null,
+    sharpness: null, slots: 0, hornNotes: null, creationCost: 750, upgradeCost: null,
+    materials: [{ itemId: 100, quantity: 3, kind: 'create' }, { itemId: 100, quantity: 2, kind: 'improve' }],
+    requiresWeapon: { create: null, improve: null },
     extra: { shellingType: null, phial: null, charges: null, coatings: null, recoil: null, reloadSpeed: null, rapidFire: null, deviation: null, ammo: null, specialAmmo: null },
   }
 }
@@ -119,6 +121,18 @@ describe('validateGameData', () => {
     ['dangling drop monster', (d) => (d.materials[0].drops[0].monsterId = 5), 'materials[0].drops[0].monsterId'],
     ['dangling location', (d) => (d.materials[0].gathering[0].locationId = 5), 'materials[0].gathering[0].locationId'],
     ['dangling wyporium unlock quest', (d) => (d.materials[0].sources.wyporium[0].unlockQuestId = 5), 'materials[0].sources.wyporium[0].unlockQuestId'],
+    ['dangling weapon material', (d) => (d.weapons[0].materials[0].itemId = 5), 'weapons[0].materials[0].itemId'],
+    ['zero weapon material quantity', (d) => (d.weapons[0].materials[0].quantity = 0), 'weapons[0].materials[0].quantity'],
+    ['weapon material kind not allowed', (d) => (d.weapons[0].materials[0].kind = 'createA'), 'weapons[0].materials[0].kind'],
+    ['duplicate weapon material line', (d) => d.weapons[0].materials.push({ ...d.weapons[0].materials[0] }), 'weapons[0].materials[2].itemId'],
+    ['negative creation cost', (d) => (d.weapons[0].creationCost = -1), 'weapons[0].creationCost'],
+    ['non-integer upgrade cost', (d) => (d.weapons[0].upgradeCost = 1.5), 'weapons[0].upgradeCost'],
+    ['missing weapon materials', (d) => delete d.weapons[0].materials, 'weapons[0].materials'],
+    ['unknown requiresWeapon id', (d) => (d.weapons[0].requiresWeapon.improve = 99), 'weapons[0].requiresWeapon.improve'],
+    ['weapon requires itself', (d) => (d.weapons[0].requiresWeapon.create = 30), 'weapons[0].requiresWeapon.create'],
+    ['weapon is its own parent', (d) => (d.weapons[0].parentId = 30), 'weapons[0].parentId'],
+    ['missing requiresWeapon', (d) => delete d.weapons[0].requiresWeapon, 'weapons[0].requiresWeapon'],
+    ['non-integer requiresWeapon', (d) => (d.weapons[0].requiresWeapon.create = '31'), 'weapons[0].requiresWeapon.create'],
     ['dangling parent weapon', (d) => (d.weapons[1].parentId = 5), 'weapons[1].parentId'],
   ]
   it.each(cases)('%s', (_n, mutate, path) => expect(pathOf(mutate)).toBe(path))

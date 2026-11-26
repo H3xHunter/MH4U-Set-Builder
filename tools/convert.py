@@ -89,6 +89,94 @@ def parse_affinity(text, label):
     raise ConvertError(f"{label}: unparsable affinity {text!r}")
 
 
+def parse_cost(v, what, warn):
+    """Zenny cost: blank -> None, a non-negative integer -> int. Free text (one real row) -> None with a warning."""
+    v = blank(v)
+    if v is None:
+        return None
+    if isinstance(v, str) and INT_RE.match(v.strip()):
+        v = int(v)
+    if isinstance(v, int):
+        if v < 0:
+            raise ConvertError(f"{what}: negative cost {v}")
+        return v
+    warn(f"{what}: cost is not an integer {v!r}, set to null")
+    return None
+
+
+def weapon_materials(w, lines, item_type, warn):
+    """Recipe lines of one weapon: [{itemId, quantity, kind}], kind create|improve.
+
+    Weapon-type ingredients are the parent weapon (an upgrade step), not materials, so they are left out. An Improve
+    recipe must have exactly one, equal to parentId; anything else is reported as a warning and also left out.
+    A Create line whose weapon ingredient is the parent is left out the same way; any other one is a warning.
+    Exact duplicate rows are kept once (warning); the same item and kind with another quantity is fatal.
+    Returns (lines, requires). requires[kind] is the single weapon ingredient of that kind's recipe when it says
+    something parentId does not (every create one, an improve one different from parentId), else None.
+    """
+    label = f"weapon {w['id']} {w['name']!r}"
+    out, seen, requires = [], {}, {"create": None, "improve": None}
+    for kind in ("create", "improve"):
+        wing, present = [], False
+        for l in lines:
+            if l["kind"] not in ("create", "improve"):
+                raise ConvertError(f"{label}: unexpected recipe kind {l['kind']!r}")
+            if l["kind"] != kind:
+                continue
+            present = True
+            if not isinstance(l["quantity"], int) or l["quantity"] <= 0:
+                raise ConvertError(f"{label}: bad quantity {l['quantity']!r} for item {l['itemId']}")
+            if item_type.get(l["itemId"]) == "Weapon":
+                wing.append(l)
+                continue
+            key = (l["itemId"], kind)
+            if key in seen:
+                if seen[key] != l["quantity"]:
+                    raise ConvertError(f"{label}: item {l['itemId']} listed twice for {kind} with different quantities")
+                warn(f"{label}: duplicate {kind} line for item {l['itemId']} x{l['quantity']}, kept once")
+                continue
+            seen[key] = l["quantity"]
+            out.append(l)
+        ids = [x["itemId"] for x in wing]
+        if len(wing) > 1:
+            warn(f"{label}: {kind} recipe has {len(wing)} weapon ingredients {ids}, all left out")
+        elif kind == "improve" and present and (ids or w["parentId"] is not None) and ids != [w["parentId"]]:
+            warn(f"{label}: improve weapon ingredient {ids or 'none'} does not match parentId {w['parentId']}")
+        elif kind == "create" and ids and ids != [w["parentId"]]:
+            warn(f"{label}: create weapon ingredient {ids} does not match parentId {w['parentId']}")
+        if len(wing) == 1 and wing[0]["quantity"] != 1:
+            warn(f"{label}: weapon ingredient {ids[0]} has quantity {wing[0]['quantity']}")
+        if len(wing) == 1 and (kind == "create" or ids[0] != w["parentId"]):
+            requires[kind] = ids[0]
+    return out, requires
+
+
+def warn_cycles(weapons, warn):
+    """Warn once per cycle among parentId, requiresWeapon.create and requiresWeapon.improve edges."""
+    edges = {w["id"]: [x for x in (w["parentId"], w["requiresWeapon"]["create"], w["requiresWeapon"]["improve"])
+                       if x is not None] for w in weapons}
+    state, found = {}, []
+    for root in sorted(edges):
+        stack = [(root, iter(edges[root]))]
+        path = [root]
+        state.setdefault(root, 1)
+        while stack:
+            node, it = stack[-1]
+            nxt = next(it, None)
+            if nxt is None:
+                state[node] = 2
+                stack.pop()
+                path.pop()
+            elif state.get(nxt) == 1:
+                found.append(path[path.index(nxt):] + [nxt])
+            elif nxt in edges and nxt not in state:
+                state[nxt] = 1
+                stack.append((nxt, iter(edges[nxt])))
+                path.append(nxt)
+    for c in found:
+        warn(f"weapon prerequisite cycle: {' -> '.join(map(str, c))}")
+
+
 def typed(kind, value, what):
     kind = blank(kind)
     if kind is None:
@@ -135,6 +223,9 @@ def build(conn, warn):
             {"itemId": r["component_item_id"], "quantity": r["quantity"],
              "kind": mapped(KIND, r["type"], "components.type")})
 
+    items = {r["_id"]: r for r in rows(conn, "select _id, name, type, rarity from items")}
+    item_type = {i: r["type"] for i, r in items.items()}
+
     armor = []
     for r in rows(conn, "select i._id, i.name, i.rarity, a.* from items i join armor a on a._id=i._id "
                         "where i.type='Armor' order by i._id"):
@@ -179,17 +270,21 @@ def build(conn, warn):
              "awaken": typed(r["awaken"], r["awaken_attack"], label),
              "defenseBonus": num(r["defense"], label), "sharpness": sharp,
              "slots": r["num_slots"], "hornNotes": blank(r["horn_notes"]),
+             "creationCost": parse_cost(r["creation_cost"], f"{label} creation_cost", warn),
+             "upgradeCost": parse_cost(r["upgrade_cost"], f"{label} upgrade_cost", warn),
              "extra": {k: blank(r[c]) for k, c in (
                  ("shellingType", "shelling_type"), ("phial", "phial"), ("charges", "charges"),
                  ("coatings", "coatings"), ("recoil", "recoil"), ("reloadSpeed", "reload_speed"),
                  ("rapidFire", "rapid_fire"), ("deviation", "deviation"), ("ammo", "ammo"),
                  ("specialAmmo", "special_ammo"))}}
+        w["materials"], w["requiresWeapon"] = weapon_materials(w, comps.get(r["_id"], []), item_type, warn)
         weapons.append(w)
+    warn_cycles(weapons, warn)
 
     horn = [{k: blank(r[k]) for k in ("notes", "song", "effect1", "effect2", "duration", "extension")}
             for r in rows(conn, "select * from horn_melodies order by _id")]
 
-    mat_ids = sorted({m["itemId"] for a in armor for m in a["materials"]})
+    mat_ids = sorted({m["itemId"] for x in armor + weapons for m in x["materials"]})
     drops, gather = {}, {}
     for r in rows(conn, "select * from hunting_rewards order by _id"):
         drops.setdefault(r["item_id"], []).append(
@@ -201,7 +296,6 @@ def build(conn, warn):
             {"locationId": r["location_id"], "area": blank(r["area"]), "site": blank(r["site"]),
              "rank": blank(r["rank"]), "quantity": num(r["quantity"], "gathering.quantity"),
              "percentage": num(r["percentage"], "gathering.percentage")})
-    items = {r["_id"]: r for r in rows(conn, "select _id, name, type, rarity from items")}
     mat_set = set(mat_ids)
     src = {k: {} for k in ("quests", "arena", "combining", "veggieElder", "wyporium")}
 
@@ -232,7 +326,8 @@ def build(conn, warn):
     for r in rows(conn, "select * from wyporium order by _id"):
         rec = {"itemInId": r["item_in_id"], "itemOutId": r["item_out_id"],
                "unlockQuestId": num(r["unlock_quest_id"], "wyporium.unlock_quest_id")}
-        # direction (which side the player gives) is unverified; keep column meaning only
+        # item_in_id is the item the player RECEIVES, item_out_id the one they HAND IN (confirmed by the data pattern and
+        # by Hex's in-game check of trade 1; see docs/data-format.md). Both sides are kept as stored.
         for i in {r["item_in_id"], r["item_out_id"]} & mat_set:
             add("wyporium", i, rec)
 
@@ -312,6 +407,19 @@ def check_integrity(files):
     for w in files["weapons"]:
         if w["parentId"] is not None and w["parentId"] not in wids:
             errs.append(f"weapon {w['id']}: unknown parentId {w['parentId']}")
+        for kind, rid in w["requiresWeapon"].items():
+            if rid is not None and (rid not in wids or rid == w["id"]):
+                errs.append(f"weapon {w['id']}: bad requiresWeapon.{kind} {rid}")
+        if w["parentId"] == w["id"]:
+            errs.append(f"weapon {w['id']}: is its own parent")
+        lines = [(m["itemId"], m["kind"]) for m in w["materials"]]
+        if len(lines) != len(set(lines)):
+            errs.append(f"weapon {w['id']}: duplicate recipe line")
+        for m in w["materials"]:
+            if m["itemId"] not in mats:
+                errs.append(f"weapon {w['id']}: unknown material {m['itemId']}")
+            if m["itemId"] in wids or m["kind"] not in ("create", "improve") or m["quantity"] <= 0:
+                errs.append(f"weapon {w['id']}: bad recipe line {m}")
     quest_ids = {x["id"] for x in files["quests"] if x["kind"] == "quest"}
     arena_ids = {x["id"] for x in files["quests"] if x["kind"] == "arena"}
     item_ids = ids("items") | mats

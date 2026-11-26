@@ -13,6 +13,10 @@ describe('index.css tokens', () => {
     expect(defined(`rarity-text-${n}`)).toBe(true)
   })
 
+  it('defines the material-path token', () => {
+    expect(defined('material-path')).toBe(true)
+  })
+
   it.each(['fire', 'water', 'thunder', 'ice', 'dragon'])('defines the %s element token', (e) => {
     expect(defined(`element-${e}`)).toBe(true)
   })

@@ -37,6 +37,16 @@ describe('loadGameData', () => {
     expect(urls.sort()).toEqual(DATA_FILES.map((n) => `/base/data/${n}.json`).sort())
   })
 
+  it('revalidates every data file (cache: no-cache), including on a second load (Retry)', async () => {
+    const seen: { url: string; cache: RequestCache | undefined }[] = []
+    const inner = fakeFetch(files())
+    const f: typeof fetch = async (input, init) => (seen.push({ url: String(input), cache: init?.cache }), inner(input, init))
+    await loadGameData('/', f)
+    await loadGameData('/', f)
+    expect(seen).toHaveLength(DATA_FILES.length * 2)
+    expect(seen.every((s) => s.cache === 'no-cache')).toBe(true)
+  })
+
   it('reports a 404 with the file name', async () => {
     const e = await failure(loadGameData('/', fakeFetch(files(), (u) => (u.endsWith('armor.json') ? new Response('', { status: 404 }) : undefined))))
     expect(e).toBeInstanceOf(DataLoadError)
