@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/Modal'
 import type { GameData, Weapon } from '@/data/types'
+import { trueRaw } from '@/lib/damage'
 import { rarityTextColor } from '@/lib/rarity'
 import { cn } from '@/lib/utils'
 import { BLADEMASTER_CLASSES, GUNNER_CLASSES, hunterTypeOfClass, type WeaponClass, WEAPON_CLASSES } from '@/lib/weaponClass'
@@ -25,7 +26,7 @@ import type { WeaponSelection } from '@/state/build'
 import { keyHint } from './pickerStyles'
 
 const DOUBLE_TITLE = 'Two possible values. Damage uses their average.'
-const COLS = 'md:grid md:grid-cols-[minmax(0,1fr)_56px_120px_150px_64px] md:items-center md:gap-3'
+const COLS = 'md:grid md:grid-cols-[minmax(0,1fr)_56px_56px_120px_150px_64px] md:items-center md:gap-3'
 const knownClass = (c: string): c is WeaponClass => (WEAPON_CLASSES as readonly string[]).includes(c)
 const hunterName = (h: PlayStyle) => (h === 'blade' ? 'Blademaster' : 'Gunner')
 
@@ -108,7 +109,7 @@ function ClassStep({
   )
 }
 
-function WeaponRow({
+export function WeaponRow({
   row,
   id,
   active,
@@ -126,6 +127,7 @@ function WeaponRow({
   const w = row.weapon
   const double = isDoubleAffinity(w)
   const elements = elementParts(w)
+  const trueValue = trueRaw(w) // attack / class multiplier, an exact integer in the data; null for an unknown class
   return (
     <li
       id={id}
@@ -165,6 +167,10 @@ function WeaponRow({
             <span className="text-muted-foreground md:hidden">Atk </span>
             <span className="font-mono md:text-sm">{w.attack}</span>
           </span>
+          <span>
+            <span className="text-muted-foreground md:hidden">True </span>
+            <span className="font-mono md:text-sm">{trueValue === null ? '-' : trueValue}</span>
+          </span>
           <span title={double ? DOUBLE_TITLE : undefined}>
             <span className="text-muted-foreground md:hidden">Aff </span>
             <span className="font-mono md:text-sm">{formatAffinity(w)}</span>
@@ -185,6 +191,20 @@ function WeaponRow({
         </div>
       </div>
     </li>
+  )
+}
+
+/** Column titles of the weapon list; hidden below md, where each row labels its own stats. */
+export function WeaponHeader() {
+  return (
+    <div className={cn(COLS, 'hidden border-y px-4 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground')}>
+      <span className="pl-7">Name</span>
+      <span>Attack</span>
+      <span>True</span>
+      <span>Affinity</span>
+      <span>Element</span>
+      <span>Slots</span>
+    </div>
   )
 }
 
@@ -348,13 +368,7 @@ function ClassList({
           ? `${rows.filter((r) => !r.context).length} matches for '${q}'`
           : `${rows.length} ${rows.length === 1 ? 'weapon' : 'weapons'}`}
       </p>
-      <div className={cn(COLS, 'hidden border-y px-4 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground')}>
-        <span className="pl-7">Name</span>
-        <span>Attack</span>
-        <span>Affinity</span>
-        <span>Element</span>
-        <span>Slots</span>
-      </div>
+      <WeaponHeader />
       <ul id={`${base}-tree`} role="tree" aria-label={`${cls} weapons`} className="min-h-0 flex-1 overflow-y-auto border-t md:border-t-0">
         {rows.map((r, i) => (
           <WeaponRow key={r.weapon.id} row={r} id={optionId(r.weapon.id)} active={i === active} foldable={foldable} onPick={onPick} onToggle={toggle} />

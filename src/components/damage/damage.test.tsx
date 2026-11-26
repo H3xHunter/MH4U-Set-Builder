@@ -53,10 +53,10 @@ const html = (node: React.ReactElement) => renderToStaticMarkup(node)
 const card = (d: DamageState) => text(<DamageCard dmg={d} />)
 
 describe('DamageCard', () => {
-  it('Great Sword: EFR true value with the in-game number beside it, and the breakdown', () => {
+  it('Great Sword: the EFR headline is the true value only; the breakdown keeps its in-game numbers', () => {
     const t = card(state(1, 1)) // Attack Up (L) 20, Powercharm and Powertalon on: raw 275
-    expect(t).toContain('Effective raw (EFR)')
-    expect(t).toContain('390.2 (1873.1 in game)') // 275 * 1.32 * 1.075 = 390.225; * 4.8 = 1873.08
+    expect(t).toContain('Effective raw (EFR) 390.2 True raw') // 275 * 1.32 * 1.075 = 390.225
+    expect(t).not.toContain('1873.1') // the in-game EFR (390.225 * 4.8) is not shown
     expect(t).toContain('True raw (weapon) 240.0 (1152 in game)')
     expect(t).toContain('Raw after buffs 275.0 (1320.0 in game)')
     expect(t).toContain('Affinity +30.0%')
@@ -68,7 +68,8 @@ describe('DamageCard', () => {
   it('toggling a buff changes the displayed EFR', () => {
     const before = card(state(1, 1))
     const after = card(state(1, 1, setToggle(setToggle(INITIAL_CONTROLS, 'item:powercharm', false), 'item:powertalon', false)))
-    expect(after).toContain('368.9 (1770.9 in game)') // 260 * 1.32 * 1.075 = 368.94
+    expect(after).toContain('Effective raw (EFR) 368.9') // 260 * 1.32 * 1.075 = 368.94
+    expect(after).toContain('Raw after buffs 260.0 (1248.0 in game)')
     expect(after).not.toBe(before)
     const noSkill = card(state(1, 1, setToggle(INITIAL_CONTROLS, 'skill:attack', false)))
     expect(noSkill).toContain('True raw (weapon) 240.0')

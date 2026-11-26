@@ -69,7 +69,7 @@ Session-only state (toggle overrides over the registry defaults, and the chosen 
 The chosen color belongs to the weapon it was chosen for (a new weapon starts at the top color) and falls back to the top
 color for good if the active bar no longer has it (Handicraft switched off).
 
-- **Damage card:** EFR (true value large, in-game value beside it, one decimal everywhere), one row per element or status
+- **Damage card:** EFR (the true value, large, with no in-game number; the "Raw after buffs" row keeps its in-game number because that is what the 3DS status screen shows; one decimal everywhere), one row per element or status
   instance ("Effective element: Fire", "Effective status: Poison" with the note that a higher value means faster buildup, not
   more damage), the breakdown (true raw, raw after buffs, affinity, crit factor, sharpness with its multipliers), the sharpness
   selector, and the Weakness Exploit note when the flag is set. Multipliers show their exact digits (x1.075). A result that
@@ -77,6 +77,7 @@ color for good if the active bar no longer has it (Handicraft switched off).
 - **Buffs card:** an "Attack" section with Skills (the ones the build provides, named by the tier reached), Items, Songs
   (Hunting Horn; the note says songs are not yet limited to the horn's notes) and Kinsect (Insect Glaive; the active combination
   as text). "Reset buffs" returns every toggle to its default. A Defense section is added later next to Attack.
+- **Weapon picker:** a "True" column after Attack shows `attack / class multiplier` (an integer) for every class; on narrow screens the row's second line shows "True 240".
 - **Mobile summary:** EFR and EFE (the shown value of each instance, "Status " before a status value, " / " between two,
   an en dash when unavailable) next to the defense total.
 

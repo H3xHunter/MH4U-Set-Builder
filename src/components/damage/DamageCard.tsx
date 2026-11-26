@@ -72,7 +72,6 @@ export function DamageCard({ dmg }: { dmg: DamageState }) {
           <span className="font-mono text-4xl font-bold" data-slot="efr">
             {formatDecimal(result.efrTrue)}
           </span>
-          <span className="ml-2 font-mono text-sm text-muted-foreground">({formatDecimal(result.efrDisplayed)} in game)</span>
         </p>
       </div>
 
